@@ -1,0 +1,625 @@
+<html>
+
+<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>change_one</title>
+<script type="text/javascript" src="glMatrix.js"></script>
+<script type="text/javascript" src="teapot.js"></script>
+
+<script id="base_vs" type="x-shader/x-vertex">
+    #version 100
+    attribute vec4 Position;
+    attribute vec3 nNormal;
+    attribute vec2 Texcoord;
+
+    varying mediump vec2 texcoord;
+    varying mediump vec3 normal;
+    varying mediump vec4 depthPos;
+
+    uniform mat4 mvpMatrix;
+    uniform mat4 depthMvpMatrix;
+    // uniform mat4 nMatrix;
+
+    void main()
+    {
+        texcoord = Texcoord;
+        normal = nNormal;
+        
+        gl_Position = mvpMatrix * Position;
+        depthPos = depthMvpMatrix * Position;
+    }
+</script>
+
+<script id="base_fs" type="x-shader/x-fragment">
+    #version 100
+    precision mediump float;
+    varying mediump vec3 normal;
+    varying mediump vec2 texcoord;
+    varying mediump vec4 depthPos;
+    
+    uniform sampler2D texture;
+
+    void main()
+    { 
+        vec4 depPos = depthPos / depthPos.w;
+        float d = depPos.z * 0.5 + 0.5;
+        float b = 1.0;
+        vec2 texcoo = depPos.xy * 0.5 + vec2(0.5);
+        vec4 depth;
+
+        depth = texture2D(texture, texcoo);
+        
+        float depth_value = dot(depth, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0));
+
+        if(d-0.005 > depth_value) b = 0.5;
+        
+        
+        gl_FragColor = vec4(b, b, b, 1.0);// vec4(depth);// texture2D(texture, texcoord);//  
+        //gl_FragColor.a = 1.0;
+        //gl_FragColor = depth;
+    }
+</script>
+
+<script id="shadow_vs" type="x-shader/x-vertex">
+    #version 100
+    attribute vec4 Position;
+    //attribute vec3 Normal;
+    //attribute vec2 Texcoord;
+    
+    uniform mat4 mvpMatrix;
+    //uniform mat4 invertMatrix;
+    
+    varying vec4 position;
+    
+    void main()
+    {
+        //texcoord = Texcoord;
+        //normal = normalize((Normal * invertMatrix).xyz);
+        //vec4 pos = ;
+        gl_Position = mvpMatrix * Position;
+        position = gl_Position;
+    }
+</script>
+
+<script id="shadow_fs" type="x-shader/x-fragment">
+    #version 100
+    precision mediump float;
+    
+    varying vec4 position;
+    
+    void main()
+    {
+        float z = position.z / position.w; //gl_FragCoord.z * 0.5 + 0.5;
+        z = z * 0.5 + 0.5;
+        vec4 enc = vec4(1.0, 255.0, 65025.0, 16581375.0) * z;
+        enc = fract(enc);
+        enc -= enc.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0);
+        gl_FragColor = enc;
+        //gl_FragColor.r = gl_FragColor.g;
+        //gl_FragColor.b = gl_FragColor.g;
+        //gl_FragColor.a = 1.0;//vec4(position, 1.0) * 0.3 + vec4(0.7);
+    }
+
+</script>
+
+<!--<script type="text/javascript" src="lge.js"></script>-->
+<!--
+<script type="text/javascript">
+
+	var gl;
+	var canvas;
+    var ext = {};
+
+    var POSITION_LOCATION = 0;
+    var NORMAL_LOCATION = 1;
+    var TEXCOORD_LOCATION = 2;
+
+    var ball_vao;
+    var base_shader;
+
+    var VertexBufferObject = {
+        create : function(){
+            var vertexBufferObject = {};
+            vertexBufferObject.handle = null;
+            vertexBufferObject.loaction = 0;
+            vertexBufferObject.itemSize = 0;
+            vertexBufferObject.numItems = 0;
+            vertexBufferObject.dataType = gl.FLOAT;
+            return vertexBufferObject;
+        }
+
+        // copy : function(_vbo){
+        //     var vertexBufferObject = create();
+        //     vertexBufferObject.handle = _vbo.handle;
+        //     vertexBufferObject.loaction = _vbo.loaction;
+        //     vertexBufferObject.itemSize = _vbo.itemSize;
+        //     vertexBufferObject.numItems = _vbo.numItems;
+        //     return vertexBufferObject;
+        // }
+    };
+
+    var Mesh = {
+        
+
+        POSITION_LOCATION : 0,
+        NORMAL_LOCATION : 1,
+        TEXCOORD_LOCATION : 2,
+
+        create : function(){
+            var mesh = {};
+            mesh.Position = null;
+            mesh.Normal = null;
+            mesh.Texcoord = null;
+
+            mesh.vao = null;
+
+            mesh.vbo = {};
+
+            mesh.getPositionLocation = function(){ return POSITION_LOCATION; };
+            mesh.getNormalLocation = function(){ return NORMAL_LOCATION; };
+            mesh.getTexcoordLocation = function(){ return TEXCOORD_LOCATION; };
+
+            return mesh;
+        }
+    };
+
+    var Texture = {
+        create : function(){
+            var texture = {};
+            texture.handle = null;
+            texture.active = 0;
+            return texture
+        }
+
+        // copy : function(_texture){
+        //     var texture = create();
+        //     texture.handle = _texture.handle;
+        //     texture.active = _texture.active;
+        //     return texture;
+        // }
+    };
+
+    var VertexArrayObject = {
+        create : function(){
+            var vao = {};
+            vao.handle = null;
+            vao.vbos = [];
+            // vao.bind = function(){
+            //     ext.OES_vertex_array_object.bindVertexArrayOES(this.handle);
+            // }
+            vao.addVbo = function(_vbo){
+                vao.vbos.push(_vbo)
+            }
+            return vao;
+        }
+    };
+
+    var DrawParamter = {
+        create : function(){
+            var drawParamter = {};
+
+            return drawParamter;
+        }
+    };
+
+    var DrawAble = {
+        create : function(){
+            var drawAble = {};
+            drawAble.name = "";
+            drawAble.vao = null;
+            drawAble.shader = null;
+            drawAble.texture = [];
+            drawAble.begin = 0;
+            drawAble.num = 0;
+            drawAble.type = gl.ARRAY_BUFFER;
+            drawAble.element = gl.UNSIGNED_SHORT;
+            return drawAble;
+        }
+    };
+
+    var Shader = {
+        create : function(){
+            var shader = {};
+            shader.handle = null;
+            // shader.use = function(){
+            //     gl.useProgram(this.handle);
+            // }
+            return shader;
+        }
+    };
+
+    var Node = {
+        create : function(){
+            var node = {};
+            node.drawAble = null;
+            node.position = vec3.create();
+            node.rotate = quat4.create();
+            // node.
+            return node;
+        }
+    };
+
+    var Camera = {
+        create : function(){
+            var camera = {};
+            camera.perspectiveMatrix = mat4.create();
+            return camera;
+        }
+    };
+
+    var NodeArray = [];
+
+    function initGL(){
+		try{
+    		gl = canvas.getContext("webgl");
+            // console.log(canvas.getContext("experimental-webgl2"));
+    		gl.viewportWidth = canvas.width;
+    		gl.viewportHeight = canvas.height;
+    	} catch(e){
+		}
+    	if(!gl)
+    	{
+    		alert("Could not initialise WebGL");
+    	}
+
+        console.log(gl);
+
+        ext.OES_vertex_array_object = gl.getExtension("OES_vertex_array_object");
+        ext.WEBGL_draw_buffers = gl.getExtension("WEBGL_draw_buffers");
+        ext.OES_standard_derivatives = gl.getExtension("OES_standard_derivatives");
+
+        console.log(ext.OES_standard_derivatives);
+        console.log(ext.OES_vertex_array_object);
+        console.log(ext.WEBGL_draw_buffers);
+    
+        // var __vao1 = ext.OES_vertex_array_object.createVertexArrayOES();
+
+        // console.log(__vao1);
+        // console.log(gl.getParameter(ext.WEBGL_draw_buffers.MAX_DRAW_BUFFERS_WEBGL));
+
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) 
+        {
+            // Can't use framebuffer.
+            // See http://www.khronos.org/opengles/sdk/docs/man/xhtml/glCheckFramebufferStatus.xml
+        }
+
+        // var mesh = Mesh.create();
+
+        // console.log(mesh);
+
+        // var vao = gl.createVertexArrayOES();
+    }
+
+    var r = 0.0;
+
+    var animationframe = window.requestAnimationFrame
+    					||window.mozRequestAnimationFrame
+    					||window.webkitRequestAnimationFrame
+    					||window.msRequestAnimationFrame
+    					||window.oRequestAnimationFrame
+    					||function(a){
+  		setTimeout(a, 1000/30);
+  	};
+
+    var vbo_position;
+    var vbo_index;
+
+    function initBuffer(){
+
+        var latitudeBands = 30;
+        var longitudeBands = 30;
+        var radius = 1;
+
+        var vertexPositionData = [];
+        var normalData = [];
+        var textureCoordData = [];
+        for (var latNumber=0; latNumber <= latitudeBands; latNumber++) {
+            var theta = latNumber * Math.PI / latitudeBands;
+            var sinTheta = Math.sin(theta);
+            var cosTheta = Math.cos(theta);
+
+            for (var longNumber = 0; longNumber <= longitudeBands; longNumber++) {
+                var phi = longNumber * 2 * Math.PI / longitudeBands;
+                var sinPhi = Math.sin(phi);
+                var cosPhi = Math.cos(phi);
+
+                var x = cosPhi * sinTheta;
+                var y = cosTheta;
+                var z = sinPhi * sinTheta;
+                var u = 1 - (longNumber / longitudeBands);
+                var v = 1 - (latNumber / latitudeBands);
+
+                normalData.push(x);
+                normalData.push(y);
+                normalData.push(z);
+                textureCoordData.push(u);
+                textureCoordData.push(v);
+                vertexPositionData.push(radius * x);
+                vertexPositionData.push(radius * y);
+                vertexPositionData.push(radius * z);
+            }
+        }
+
+        var indexData = [];
+        for (var latNumber = 0; latNumber < latitudeBands; latNumber++) {
+            for (var longNumber = 0; longNumber < longitudeBands; longNumber++) {
+                var first = (latNumber * (longitudeBands + 1)) + longNumber;
+                var second = first + longitudeBands + 1;
+                indexData.push(first);
+                indexData.push(second);
+                indexData.push(first + 1);
+
+                indexData.push(second);
+                indexData.push(second + 1);
+                indexData.push(first + 1);
+            }
+        }
+
+        // var vertexPositionData = [
+        //     -0.5,  0.5,
+        //     -0.5, -0.5,
+        //      0.5, -0.5,
+        //      0.5,  0.5
+        // ];
+
+        // var indexData = [
+        //     0, 1, 2,
+        //     2, 3, 0
+        // ];
+
+        vbo_position = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        vbo_index = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vbo_index);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        vbo_index.numItems = indexData.length;
+
+        ball_vao = ext.OES_vertex_array_object.createVertexArrayOES();
+        ext.OES_vertex_array_object.bindVertexArrayOES(ball_vao);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+        gl.enableVertexAttribArray(POSITION_LOCATION);
+        gl.vertexAttribPointer(POSITION_LOCATION, 3, gl.FLOAT, false, 0, 0);
+        
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vbo_index);
+
+        ext.OES_vertex_array_object.bindVertexArrayOES(null);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+        // ball_vao.addVbo(vbo_position);
+
+        //ball 
+        // var latitudeBands = 30;
+        // var longitudeBands = 30;
+        // var radius = 1;
+
+        // var vertexPositionData = [];
+        // var normalData = [];
+        // var textureCoordData = [];
+        // for (var latNumber=0; latNumber <= latitudeBands; latNumber++) {
+        //     var theta = latNumber * Math.PI / latitudeBands;
+        //     var sinTheta = Math.sin(theta);
+        //     var cosTheta = Math.cos(theta);
+
+        //     for (var longNumber = 0; longNumber <= longitudeBands; longNumber++) {
+        //         var phi = longNumber * 2 * Math.PI / longitudeBands;
+        //         var sinPhi = Math.sin(phi);
+        //         var cosPhi = Math.cos(phi);
+
+        //         var x = cosPhi * sinTheta;
+        //         var y = cosTheta;
+        //         var z = sinPhi * sinTheta;
+        //         var u = 1 - (longNumber / longitudeBands);
+        //         var v = 1 - (latNumber / latitudeBands);
+
+        //         normalData.push(x);
+        //         normalData.push(y);
+        //         normalData.push(z);
+        //         textureCoordData.push(u);
+        //         textureCoordData.push(v);
+        //         vertexPositionData.push(radius * x);
+        //         vertexPositionData.push(radius * y);
+        //         vertexPositionData.push(radius * z);
+        //     }
+        // }
+
+        // var indexData = [];
+        // for (var latNumber = 0; latNumber < latitudeBands; latNumber++) {
+        //     for (var longNumber = 0; longNumber < longitudeBands; longNumber++) {
+        //         var first = (latNumber * (longitudeBands + 1)) + longNumber;
+        //         var second = first + longitudeBands + 1;
+        //         indexData.push(first);
+        //         indexData.push(second);
+        //         indexData.push(first + 1);
+
+        //         indexData.push(second);
+        //         indexData.push(second + 1);
+        //         indexData.push(first + 1);
+        //     }
+        // }
+
+        // ball_vao.vbo_position = VertexBufferObject.create();
+        // vbo_position.handle = gl.createBuffer();
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position.handle);
+        // gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+        // vbo_position.itemSize = 3;
+        // vbo_position.numItems = vertexPositionData.length / 3;
+        // vbo_position.loaction = POSITION_LOCATION;
+
+        // gl.enableVertexAttribArray(POSITION_LOCATION);
+
+        // ball_vao.vbo_texcoord = VertexBufferObject.create();
+        // vbo_texcoord.handle = gl.createBuffer();
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texcoord.handle);
+        // gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordData), gl.STATIC_DRAW);
+        // vbo_texcoord.itemSize = 2;
+        // vbo_texcoord.numItems = vertexPositionData.length / 2;
+        // vbo_texcoord.loaction = TEXCOORD_LOCATION;
+
+        // ball_vao.vbo_normal = VertexBufferObject.create();
+        // vbo_normal.handle = gl.createBuffer();
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_normal.handle);
+        // gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+        // vbo_normal.itemSize = 3;
+        // vbo_normal.numItems = vertexPositionData.length / 3;
+        // vbo_normal.loaction = NORMAL_LOCATION;
+
+        // gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        // ball_vao.ibo = VertexArrayObject.create();
+        // ibo.handle = gl.createBuffer();
+        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo.handle);
+        // gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STATIC_DRAW);
+        // ibo.itemSize = 1;
+        // ibo.numItems = indexData.length;
+        // ibo.dataType = gl.UNSIGNED_SHORT;
+
+        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+        // ball_vao = VertexArrayObject.create();
+        // ball_vao.handle = ext.OES_vertex_array_object.createVertexArrayOES();
+        // ext.OES_vertex_array_object.bindVertexArrayOES(ball_vao.handle);
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position.handle);
+        // gl.enableVertexAttribArray(POSITION_LOCATION);
+        // gl.vertexAttribPointer(POSITION_LOCATION, vbo_position.itemSize, vbo_position.dataType, false, 0, 0);
+
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texcoord.handle);
+        // gl.enableVertexAttribArray(TEXCOORD_LOCATION);
+        // gl.vertexAttribPointer(TEXCOORD_LOCATION, vbo_texcoord.itemSize, vbo_texcoord.dataType, false, 0, 0);
+
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_normal.handle);
+        // gl.enableVertexAttribArray(NORMAL_LOCATION);
+        // gl.vertexAttribPointer(NORMAL_LOCATION, vbo_normal.itemSize, vbo_normal.dataType, false, 0, 0);
+
+        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo.handle);
+
+        // ext.OES_vertex_array_object.bindVertexArrayOES(null);
+
+    }
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+    function initShader(){
+        base_shader = Shader.create();
+        var fragmentShader = getShader(gl, "base_vs");
+        var vertexShader = getShader(gl, "base_fs");
+
+        base_shader.handle = gl.createProgram();
+        gl.attachShader(base_shader.handle, vertexShader);
+        gl.attachShader(base_shader.handle, fragmentShader);
+
+        // gl.bindAttribLocation(base_shader.handle, POSITION_LOCATION, "Position");
+        // gl.bindAttribLocation(base_shader.handle, NORMAL_LOCATION, "nNormal");
+        // gl.bindAttribLocation(base_shader.handle, TEXCOORD_LOCATION, "Texcoord");
+
+        gl.linkProgram(base_shader.handle);
+
+        POSITION_LOCATION = gl.getAttribLocation(base_shader.handle, "Position");
+        // NORMAL_LOCATION = gl.getAttribLocation(base_shader.handle, "nNormal");
+        // TEXCOORD_LOCATION = gl.getAttribLocation(base_shader.handle, "Texcoord");
+
+        // console.log(POSITION_LOCATION);
+        // console.log(NORMAL_LOCATION);
+        // console.log(TEXCOORD_LOCATION);
+
+        // base_shader.mvpMatrixUniform = gl.getUniformLocation(base_shader.handle, "mvpMatrix");
+
+        if (!gl.getProgramParameter(base_shader.handle, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+    }
+
+    function initCamera(){
+
+    }
+
+    function tick(){
+        animationframe(tick);
+        // drawScene();
+        // animate();
+
+        r += 0.01;
+        r = r > 1.0 ? 0.0 : r;
+        gl.clearColor(r, 0.5, 0.5, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        gl.useProgram(base_shader.handle);
+
+        // ext.OES_vertex_array_object.bindVertexArrayOES(ball_vao.handle);
+        ext.OES_vertex_array_object.bindVertexArrayOES(ball_vao);
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+        // gl.enableVertexAttribArray(POSITION_LOCATION);
+        // gl.vertexAttribPointer(POSITION_LOCATION, 2, gl.FLOAT, false, 0, 0);
+        
+        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vbo_index);
+
+        gl.drawElements(gl.TRIANGLES, vbo_index.numItems, gl.UNSIGNED_SHORT, 0);
+
+    }
+
+    function webGLStart(){
+    	canvas = document.getElementById(20);
+    	canvas.width = 800;
+    	canvas.height = 600;
+    	initGL();
+        initShader();
+        initBuffer();
+        initCamera();
+    	// gl.clearColor(1.0, 0.5, 0.5, 1.0);
+
+    	tick();
+    }
+    
+</script>
+-->
+</head>
+
+<body>
+<!--<canvas id=20 style="border:none;" width="500" height="500"> </canvas>-->
+<div>
+<script type="text/javascript" src="lge.js"></script>
+</div>
+<!--<div>咦哈哈哈哈哈哈</div>-->
+<!--<script type=""></script>-->
+<!--<script src="three.js" data-ke-src="three.js"></script>-->
+</body>
+
+</html>
