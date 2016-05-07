@@ -5,7 +5,9 @@ var objects = [];
 var raycaster;
 var blocker = document.getElementById( 'blocker' );
 var instructions = document.getElementById( 'instructions' );
+var texture_placeholder;
 var havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
+var box_mesh;
 if ( havePointerLock ) {
 	var element = document.body;
 	var pointerlockchange = function ( event ) {
@@ -64,10 +66,16 @@ var moveRight = false;
 var canJump = false;
 var prevTime = performance.now();
 var velocity = new THREE.Vector3();
+
 function init() {
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 1000 );
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 2000 );
 	scene = new THREE.Scene();
-	scene.fog = new THREE.Fog( 0xffffff, 0, 750 );
+	texture_placeholder = document.createElement( 'canvas' );
+	texture_placeholder.width = 128;
+	texture_placeholder.height = 128;
+	var context = texture_placeholder.getContext( '2d' );
+	context.fillStyle = 'rgb( 200, 200, 200 )';
+	context.fillRect( 0, 0, texture_placeholder.width, texture_placeholder.height );
 	var light = new THREE.HemisphereLight( 0xeeeeff, 0x777788, 0.75 );
 	light.position.set( 0.5, 1, 0.75 );
 	scene.add( light );
@@ -91,7 +99,7 @@ function init() {
 				moveRight = true;
 				break;
 			case 32: // space
-				if ( canJump === true ) velocity.y += 350;
+				if ( canJump === true ) velocity.y += 500;
 				canJump = false;
 				break;
 		}
@@ -122,28 +130,24 @@ function init() {
 	// floor
 	geometry = new THREE.PlaneGeometry( 2000, 2000, 100, 100 );
 	geometry.rotateX( - Math.PI / 2 );
-	for ( var i = 0, l = geometry.vertices.length; i < l; i ++ ) {
-		var vertex = geometry.vertices[ i ];
-		vertex.x += Math.random() * 20 - 10;
-		vertex.y += Math.random() * 2;
-		vertex.z += Math.random() * 20 - 10;
-	}
 	for ( var i = 0, l = geometry.faces.length; i < l; i ++ ) {
 		var face = geometry.faces[ i ];
-		face.vertexColors[ 0 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-		face.vertexColors[ 1 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-		face.vertexColors[ 2 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
+		face.vertexColors[ 0 ] = new THREE.Color().setRGB( Math.random()*0.5+0.25, 0.75, Math.random()*0.5+0.25);
+		face.vertexColors[ 1 ] = new THREE.Color().setRGB( Math.random()*0.5+0.25, 0.75, Math.random()*0.5+0.25);
+		face.vertexColors[ 2 ] = new THREE.Color().setRGB( Math.random()*0.5+0.25, 0.75, Math.random()*0.5+0.25);
 	}
 	material = new THREE.MeshBasicMaterial( { vertexColors: THREE.VertexColors } );
 	mesh = new THREE.Mesh( geometry, material );
+	mesh.position.x = 10;
+	mesh.position.z = 10;
 	scene.add( mesh );
 	// objects
 	geometry = new THREE.BoxGeometry( 20, 20, 20 );
 	for ( var i = 0, l = geometry.faces.length; i < l; i ++ ) {
 		var face = geometry.faces[ i ];
-		face.vertexColors[ 0 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-		face.vertexColors[ 1 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
-		face.vertexColors[ 2 ] = new THREE.Color().setHSL( Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
+		face.vertexColors[ 0 ] = new THREE.Color().setRGB(0.9, Math.random()*0.5+0.25, Math.random()*0.5+0.25);
+		face.vertexColors[ 1 ] = new THREE.Color().setRGB(0.9, Math.random()*0.5+0.25, Math.random()*0.5+0.25);
+		face.vertexColors[ 2 ] = new THREE.Color().setRGB(0.9, Math.random()*0.5+0.25, Math.random()*0.5+0.25);
 	}
 	for ( var i = 0; i < 500; i ++ ) {
 		material = new THREE.MeshPhongMaterial( { specular: 0xffffff, shading: THREE.FlatShading, vertexColors: THREE.VertexColors } );
@@ -155,6 +159,17 @@ function init() {
 		material.color.setHSL( Math.random() * 0.2 + 0.5, 0.75, Math.random() * 0.25 + 0.75 );
 		objects.push( mesh );
 	}
+	var materials = [
+		loadTexture( './textures/cube/skybox/px.jpg' ), // right
+		loadTexture( './textures/cube/skybox/nx.jpg' ), // left
+		loadTexture( './textures/cube/skybox/py.jpg' ), // top
+		loadTexture( './textures/cube/skybox/ny.jpg' ), // bottom
+		loadTexture( './textures/cube/skybox/pz.jpg' ), // back
+		loadTexture( './textures/cube/skybox/nz.jpg' )  // front
+	];
+	box_mesh = new THREE.Mesh( new THREE.BoxGeometry( 2000, 2000, 2000, 7, 7, 7 ), new THREE.MultiMaterial( materials ) );
+	box_mesh.scale.x = - 1;
+	scene.add( box_mesh );
 	//
 	renderer = new THREE.WebGLRenderer();
 	renderer.setClearColor( 0xffffff );
@@ -163,6 +178,17 @@ function init() {
 	document.body.appendChild( renderer.domElement );
 	//
 	window.addEventListener( 'resize', onWindowResize, false );
+}
+function loadTexture( path ) {
+	var texture = new THREE.Texture( texture_placeholder );
+	var material = new THREE.MeshBasicMaterial( { map: texture, overdraw: 0.5 } );
+	var image = new Image();
+	image.src = path;
+	image.onload = function () {
+		texture.image = this;
+		texture.needsUpdate = true;
+	};
+	return material;
 }
 function onWindowResize() {
 	camera.aspect = window.innerWidth / window.innerHeight;
@@ -197,6 +223,9 @@ function animate() {
 			controls.getObject().position.y = 10;
 			canJump = true;
 		}
+		box_mesh.position.x = controls.getObject().position.x;
+		box_mesh.position.y = controls.getObject().position.y;
+		box_mesh.position.z = controls.getObject().position.z;
 		prevTime = time;
 	}
 	renderer.render( scene, camera );
