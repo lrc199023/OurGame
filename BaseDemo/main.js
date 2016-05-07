@@ -109,7 +109,7 @@ function webGLStart() {
 	var canvas = document.createElement( 'canvas' );
     document.body.appendChild(canvas);
     canvas.className = 'canvas-3d';
-    console.log(canvas);
+
     canvas.width = 800;
     canvas.height = 600;
 
