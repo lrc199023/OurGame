@@ -168,6 +168,431 @@ Object.assign( CGE, {
     shaderCount : 0,
 });
 
+//======================================= Math ===================================================
+// TODO: Math have not completed;
+// Most algorithm copy to glMatrix;
+// -------------- Vector3 ----------------
+CGE.Vector3 = function() {
+    Object.assign(this, {
+        x: 0,
+        y: 0,
+        z: 0,
+    });
+};
+
+CGE.Vector3.prototype.add = function(vec) {
+    this.x += vec.x;
+    this.y += vec.y;
+    this.z += vec.z;
+    return this;
+};
+
+CGE.Vector3.prototype.sub = function(vec) {
+    this.x -= vec.x;
+    this.y -= vec.y;
+    this.z -= vec.z;
+    return this;
+};
+
+CGE.Vector3.prototype.dot = function(vec) {
+    return this.x * vec.x + this.y * vec.y + this.z * vec.z;
+};
+
+CGE.Vector3.prototype.cross = function(vec3) {
+    let ax = this.x, ay = this.y, az = this.z,
+        bx = vec3.x, by = vec3.y, bz = vec3.z;
+    let vec = new new CGE.Vector3();
+    vec.x = ay * bz - az * by;
+    vec.y = az * bx - ax * bz;
+    vec.z = ax * by - ay * bx;
+    return vec;
+};
+
+CGE.Vector3.prototype.length = function() {
+    return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z); 
+};
+
+CGE.Vector3.prototype.normalize = function() {
+    let length = this.length();
+    if (length == 0) return this;
+    let length_inverse = 1.0 / length;
+    this.x *= length_inverse;
+    this.y *= length_inverse;
+    this.z *= length_inverse;
+    return this;
+};
+
+CGE.Vector3.prototype.clone = function() {
+    let vec = new CGE.Vector3();
+    vec.x = this.x;
+    vec.y = this.y;
+    vec.z = this.z;
+    return vec;
+};
+
+// -------------- Vector4 ----------------
+
+CGE.Vector4 = function() {
+    Object.assign(this, {
+        x: 0,
+        y: 0,
+        z: 0,
+        w: 0,
+    });
+};
+
+CGE.Vector4.applyMatrix4 = function(mat4){
+    let x = this.x, y = this.y, z = this.z, w = this.w, m = mat4.data;
+    this.x = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
+    this.y = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
+    this.z = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
+    this.w = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
+    return this;
+};
+
+CGE.Vector4.prototype.clone = function() {
+    let vec4 = new CGE.Vector4();
+    vec4.x = this.x;
+    vec4.y = this.y;
+    vec4.z = this.z;
+    vec4.w = this.w;
+    return vec4;
+};
+
+// -------------- Quaternion ----------------
+
+CGE.Quaternion = function() {
+    CGE.Vector4.call(this);
+    this.x = 0;
+    this.y = 0;
+    this.z = 0;
+    this.w = 1;
+};
+
+CGE.Quaternion.prototype = new Vector4();
+
+CGE.Quaternion.prototype.identity = function() {
+    this.x = 0;
+    this.y = 0;
+    this.z = 0;
+    this.w = 1;
+    return this;
+};
+
+CGE.Quaternion.prototype.multiply = function(quat) {
+    let ax = this.x, ay = this.y, az = this.z, aw = this.w,
+        bx = quat.x, by = quat.y, bz = quat.z, bw = quat.w;
+
+    this.x = ax * bw + aw * bx + ay * bz - az * by;
+    this.y = ay * bw + aw * by + az * bx - ax * bz;
+    this.z = az * bw + aw * bz + ax * by - ay * bx;
+    this.w = aw * bw - ax * bx - ay * by - az * bz;
+
+    return this;
+};
+
+CGE.Quaternion.prototype.setAxisAngle = function(axis, rad) {
+    rad = rad * 0.5;
+    let s = Math.sin(rad);
+    this.x = s * axis.x;
+    this.y = s * axis.y;
+    this.z = s * axis.z;
+    this.w = Math.cos(rad);
+    return this;
+};
+
+CGE.Quaternion.prototype.invert = function() {
+    var a0 = this.x, a1 = this.y, a2 = this.z, a3 = this.w,
+        dot = a0*a0 + a1*a1 + a2*a2 + a3*a3,
+        invDot = dot ? 1.0/dot : 0;
+    
+    // TODO: Would be waiting for glMatrix lib update;
+
+    this.x = -a0*invDot;
+    this.y = -a1*invDot;
+    this.z = -a2*invDot;
+    this.w = a3*invDot;
+
+    return this;
+};
+
+// -------------- Matrix4 ----------------
+
+CGE.Matrix4 = function() {
+    this.data = [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+    ];
+};
+
+CGE.Matrix4.prototype.identity = function(position) {
+    let m = this.data;
+
+    m[0]    = 1; m[1]   = 0; m[2]   = 0; m[3]   = 0;
+    m[4]    = 0; m[5]   = 1; m[6]   = 0; m[7]   = 0;
+    m[8]    = 0; m[9]   = 0; m[10]  = 1; m[11]  = 0;
+    m[12]   = 0; m[13]  = 0; m[14]  = 0; m[15]  = 1;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.translate = function(position) {
+    let m = this.data;
+
+    m[12] += m[0] * x + m[4] * y + m[8] * z;
+    m[13] += m[1] * x + m[5] * y + m[9] * z;
+    m[14] += m[2] * x + m[6] * y + m[10] * z;
+    m[15] += m[3] * x + m[7] * y + m[11] * z;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.rotate = function(axis, rad) {
+    let m = this.data;
+    var x = axis.x, y = axis.y, z = axis.z,
+        len = Math.sqrt(x * x + y * y + z * z),
+        s, c, t,
+        a00, a01, a02, a03,
+        a10, a11, a12, a13,
+        a20, a21, a22, a23,
+        b00, b01, b02,
+        b10, b11, b12,
+        b20, b21, b22;
+
+    if (Math.abs(len) < GLMAT_EPSILON) { return null; }
+    
+    len = 1 / len;
+    x *= len;
+    y *= len;
+    z *= len;
+
+    s = Math.sin(rad);
+    c = Math.cos(rad);
+    t = 1 - c;
+
+    a00 = m[0]; a01 = m[1]; a02 = m[2]; a03 = m[3];
+    a10 = m[4]; a11 = m[5]; a12 = m[6]; a13 = m[7];
+    a20 = m[8]; a21 = m[9]; a22 = m[10]; a23 = m[11];
+
+    b00 = x * x * t + c; b01 = y * x * t + z * s; b02 = z * x * t - y * s;
+    b10 = x * y * t - z * s; b11 = y * y * t + c; b12 = z * y * t + x * s;
+    b20 = x * z * t + y * s; b21 = y * z * t - x * s; b22 = z * z * t + c;
+
+    m[0] = a00 * b00 + a10 * b01 + a20 * b02;
+    m[1] = a01 * b00 + a11 * b01 + a21 * b02;
+    m[2] = a02 * b00 + a12 * b01 + a22 * b02;
+    m[3] = a03 * b00 + a13 * b01 + a23 * b02;
+    m[4] = a00 * b10 + a10 * b11 + a20 * b12;
+    m[5] = a01 * b10 + a11 * b11 + a21 * b12;
+    m[6] = a02 * b10 + a12 * b11 + a22 * b12;
+    m[7] = a03 * b10 + a13 * b11 + a23 * b12;
+    m[8] = a00 * b20 + a10 * b21 + a20 * b22;
+    m[9] = a01 * b20 + a11 * b21 + a21 * b22;
+    m[10] = a02 * b20 + a12 * b21 + a22 * b22;
+    m[11] = a03 * b20 + a13 * b21 + a23 * b22;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.scale = function(v) {
+    let m = this.data;
+
+    m[0] *= v.x;
+    m[1] *= v.x;
+    m[2] *= v.x;
+    m[3] *= v.x;
+
+    m[4] *= v.x;
+    m[5] *= v.x;
+    m[6] *= v.x;
+    m[7] *= v.x;
+
+    m[8] *= v.x;
+    m[9] *= v.x;
+    m[10] *= v.x;
+    m[11] *= v.x;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.transpose = function() {
+    let m = this.data;
+    let array = [
+        m[0], m[4], m[8], m[12],
+        m[1], m[5], m[9], m[13],
+        m[2], m[6], m[10], m[14],
+        m[3], m[7], m[11], m[15],
+    ];
+    this.data = array;
+    return this;
+};
+
+CGE.Matrix4.prototype.identity = function() {
+    let m = this.data;
+    var a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3],
+        a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7],
+        a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11],
+        a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15],
+
+        b00 = a00 * a11 - a01 * a10,
+        b01 = a00 * a12 - a02 * a10,
+        b02 = a00 * a13 - a03 * a10,
+        b03 = a01 * a12 - a02 * a11,
+        b04 = a01 * a13 - a03 * a11,
+        b05 = a02 * a13 - a03 * a12,
+        b06 = a20 * a31 - a21 * a30,
+        b07 = a20 * a32 - a22 * a30,
+        b08 = a20 * a33 - a23 * a30,
+        b09 = a21 * a32 - a22 * a31,
+        b10 = a21 * a33 - a23 * a31,
+        b11 = a22 * a33 - a23 * a32,
+
+        det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+
+    if (!det) { 
+        return null; 
+    }
+    det = 1.0 / det;
+
+    m[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+    m[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+    m[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+    m[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+    m[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+    m[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+    m[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+    m[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+    m[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+    m[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+    m[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+    m[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+    m[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+    m[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+    m[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+    m[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.multiply = function(mat4) {
+    let a = this.data, b = mat4.data;
+    let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+        a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+        a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11],
+        a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+
+    let b0  = b[0], b1 = b[1], b2 = b[2], b3 = b[3];  
+    a[0] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    a[1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    a[2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    a[3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+    b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
+    a[4] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    a[5] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    a[6] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    a[7] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+    b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
+    a[8] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    a[9] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    a[10] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    a[11] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+    b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
+    a[12] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    a[13] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    a[14] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    a[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+    return this;
+};
+
+CGE.Matrix4.prototype.perspective = function(fovy, aspect, near, far) {
+    let f = 1.0 / Math.tan(fovy / 2), 
+        nf = 1 / (near - far);
+    this.data = [
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (far + near) * nf, -1,
+        0, 0, (2 * far * near) * nf, 0,
+    ];
+    return this;
+};
+
+CGE.Matrix4.prototype.frustum = function(left, right, bottom, top, near, far) {
+    let rl = 1 / (right - left),
+        tb = 1 / (top - bottom),
+        nf = 1 / (near - far);
+    this.data = [
+        (near * 2) * rl, 0, 0, 0,
+        0, (near * 2) * tb, 0, 0,
+        (right + left) * rl, (top + bottom) * tb, (far + near) * nf, -1,
+        0, 0, (2 * far * near) * nf, 0,
+    ];
+    return this;
+};
+
+CGE.Matrix4.prototype.ortho = function(left, right, bottom, top, near, far) {
+    let lr = 1 / (left - right),
+        bt = 1 / (bottom - top),
+        nf = 1 / (near - far);
+    this.data = [
+        -2 * lr, 0, 0, 0,
+        0, -2 * bt, 0, 0,
+        0, 0, 2 * nf, 0,
+        (left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1,
+    ];
+    return this;
+};
+
+CGE.Matrix4.prototype.makeForQuat = function(quat) {
+    let m = this.data;
+    let x = quat.x, y = quat.y, z = quat.z, w = quat.w,
+        x2 = x + x,
+        y2 = y + y,
+        z2 = z + z,
+
+        xx = x * x2,
+        yx = y * x2,
+        yy = y * y2,
+        zx = z * x2,
+        zy = z * y2,
+        zz = z * z2,
+        wx = w * x2,
+        wy = w * y2,
+        wz = w * z2;
+
+    m[0] = 1 - yy - zz;
+    m[1] = yx + wz;
+    m[2] = zx - wy;
+    m[3] = 0;
+
+    m[4] = yx - wz;
+    m[5] = 1 - xx - zz;
+    m[6] = zy + wx;
+    m[7] = 0;
+
+    m[8] = zx + wy;
+    m[9] = zy - wx;
+    m[10] = 1 - xx - yy;
+    m[11] = 0;
+
+    m[12] = 0;
+    m[13] = 0;
+    m[14] = 0;
+    m[15] = 1;
+
+    return this;
+};
+
+CGE.Matrix4.prototype.clone = function() {
+    let mat4 = new CGE.Matrix4();
+    mat4.data = this.data.copyWithin();
+    return mat4;
+};
+
 //======================================= BufferGeometry =========================================
 
 CGE.BufferGeometry = function() {
@@ -357,7 +782,8 @@ CGE.Texture2d = function() {
         wrapS : CGE.CLAMP_TO_EDGE,
         wrapT : CGE.CLAMP_TO_EDGE,
     });
-    this.src = undefined;
+    this.img = undefined;
+    this.isLoad = false;
     this.format = CGE.RGB;
     this.internalformat = CGE.RGB;
     this.type = CGE.UNSIGNED_BYTE;
@@ -368,7 +794,13 @@ CGE.Texture2d = function() {
 CGE.Texture2d.prototype = new CGE.Texture();
 
 CGE.Texture2d.prototype.setImageSrc = function(src) {
-    this.src = src;
+    let img = new Image()
+    img.onload = function() {
+        this.isLoad = true;
+        // TODO: cull image size;
+    }.bind(this);
+    img.src = src;
+    this.img = img;
 };
 
 CGE.Texture2d.prototype.setSize = function(width, height) {
@@ -414,6 +846,23 @@ CGE.BaseMaterial.prototype.getMapRequests = function() {
         },
     ];
 };
+
+//======================================= Component =========================================
+
+CGE.Component = function() {
+
+};
+
+CGE.Transform = function() {
+    CGE.Component.call(this);
+    Object.assign(this, {
+        position: new Vector3();
+        scale: new Vector3();
+        rotate: new Quaternion();
+    });
+};
+
+CGE.Transform.prototype = new CGE.Component;
 
 //======================================= Camera =========================================
 
@@ -495,6 +944,48 @@ CGE.WebGL2Renderer = function() {
         _gl.drawElements(this.mode, this.count, this.type, this.offset);
     };
 
+    var shaderProgram = function(shader, shaderData, mapLocations, uniformLocations) {
+        this.program = shader;
+        this.shaderData = shaderData;
+        this.mapLocations = mapLocations;
+        this.uniformLocations = uniformLocations;
+    };
+
+    shaderProgram.prototype.useShaderProgram = function() {
+        _gl.useProgram(this.program);
+    };
+
+    shaderProgram.prototype.getShaderProgram = function() {
+        return this.program;
+    };
+
+    shaderProgram.prototype.getMapLocation = function(mapType) {
+        return this.mapLocations.get(mapType);
+    };
+
+    shaderProgram.prototype.getUniformLocation = function(uniformType) {
+        return this.uniformLocations.get(uniformType);
+    };
+
+    var texture2D = function(texture, minFilter, magFilter, wrapS, wrapT) {
+        Object.assign(this, {
+            texture: texture,
+            minFilter: minFilter,
+            magFilter: magFilter,
+            wrapS: wrapS,
+            wrapT: wrapT,
+        });
+    };
+
+    texture2D.prototype.apply = function(index) {
+        _gl.activeTexture(_gl.TEXTURE0 + index);
+        _gl.bindTexture(_gl.TEXTURE_2D, this.texture);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this.minFilter);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this.magFilter);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this.wrapS);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this.wrapT);
+    };
+
     this.loadVertexData = function(vertexData) {
         var data = initializedBufferMap.get(vertexData.id);
         if (data !== undefined && data.localVersion === vertexData.getUpdateVersion()) 
@@ -535,10 +1026,11 @@ CGE.WebGL2Renderer = function() {
         return bufferData;
     };
 
-    this.bufferGeometryDraw = function(bufferData, shader) {
+    this.bufferGeometryDraw = function(bufferData, material) {
         if (bufferData.vao === undefined) {
-            var vao = _gl.createVertexArray();
+            let vao = _gl.createVertexArray();
             _gl.bindVertexArray(vao);
+            let shader = material.shader;
             for (var i = 0; i < bufferData.vbos.length; i++) {
                 var attribute = bufferData.vertexData.attributeDatas[i];
                 var vbo = bufferData.vbos[i];
@@ -563,23 +1055,10 @@ CGE.WebGL2Renderer = function() {
         bufferData.draw.apply();
     };
 
-    var shaderProgram = function(shader, shaderData) {
-        this.program = shader;
-        this.shaderData = shaderData;
-    };
-
-    shaderProgram.prototype.useShaderProgram = function() {
-        _gl.useProgram(this.program);
-    };
-
-    shaderProgram.prototype.getShaderProgram = function() {
-        return this.program;
-    };
-
     this.loadShaderData = function(shaderData) {
         var data = initialisedShaderMap.get(shaderData.id);
         if (data !== undefined && data.localVersion === shaderData.getUpdateVersion()) 
-            return data.shader;
+            return data.program;
 
         var vs = _gl.createShader(_gl.VERTEX_SHADER);
         _gl.shaderSource(vs, shaderData.vertexShaderText);
@@ -615,9 +1094,22 @@ CGE.WebGL2Renderer = function() {
         _gl.deleteShader(vs);
         _gl.deleteShader(fs);
 
-        var sProgram = new shaderProgram(program, shaderData);
+        let mapLocations = new Map();
+        shaderData.requireTextureNames.forEach(function(value, key) {
+            let location = _gl.getUniformLocation(program, value);
+            mapLocations.set(key, location);
+        });
+
+        let uniformLocations = new Map();
+        shaderData.requireUniformNames.forEach(function(value, key) {
+            let location = _gl.getUniformLocation(program, value);
+            uniformLocations.set(key, location);
+        });
+
+        let sProgram = new shaderProgram(program, shaderData, mapLocations, uniformLocations);
+
         initialisedShaderMap.set(shaderData.id, {
-            shader: sProgram, 
+            program: sProgram, 
             localVersion: shaderData.getUpdateVersion(),
         });
         return sProgram;
@@ -626,40 +1118,31 @@ CGE.WebGL2Renderer = function() {
     this.loadTexture2DData = function(textureData) {
         let data = initialisedTextureMap.get(textureData.id);
         if (data !== undefined && data.localVersion === textureData.getUpdateVersion()) 
-            return data;
+            return data.texture;
         let format = textureData.format;
         let internalformat = textureData.internalformat;
         let type = textureData.type;
         let texture = undefined;
-        if (textureData.src !== undefined) {
+        if (textureData.img !== undefined && textureData.isLoad) {
             texture = _gl.createTexture();
-            texture.isLoad = false;
-            let img = new Image();
-            img.onload = function() {
-                _gl.bindTexture(_gl.TEXTURE_2D, texture);
-                _gl.texImage2D(_gl.TEXTURE_2D, 0, internalformat, format, type, img);
-                texture.isLoad = true;
-                // TODO: cull image size;
-            };
-            img.src = textureData.src;
+            _gl.bindTexture(_gl.TEXTURE_2D, texture);
+            _gl.texImage2D(_gl.TEXTURE_2D, 0, internalformat, format, type, textureData.img);
         } else if (textureData.width !== 0 && textureData.height !== 0) {
             texture = _gl.createTexture();
             _gl.bindTexture(_gl.TEXTURE_2D, texture);
-            _gl.texImage2D(gl.TEXTURE_2D, 0, internalformat, textureData.width, textureData.height, 0, format, type, img);
+            _gl.texImage2D(gl.TEXTURE_2D, 0, internalformat, textureData.width, textureData.height, 0, format, type, null);
         } else {
             return undefined;
         }
 
-        let textureObj = {
-            texture: texture,
+        let textureObj = new texture2D(texture, textureData.minFilter, textureData.magFilter, textureData.wrapS, textureData.wrapT);
+
+        let textureInnerData = {
+            texture: textureObj,
             localVersion: textureData.getUpdateVersion(),
-            minFilter: textureData.minFilter,
-            magFilter: textureData.magFilter,
-            wrapS: textureData.wrapS,
-            wrapT: textureData.wrapT,
         };
 
-        initialisedTextureMap.set(textureData.id, textureObj);
+        initialisedTextureMap.set(textureData.id, textureInnerData);
         return textureObj;
     };
 
@@ -669,39 +1152,20 @@ CGE.WebGL2Renderer = function() {
             return undefined;
         }
         shader.useShaderProgram();
-        let maps = [];
         let requestsMapTypes = materialData.getMapRequests();
         for (let i = 0; i < requestsMapTypes.length; i++) {
             let texture = this.loadTexture2DData(requestsMapTypes[i].map);
-            let mapType = requestsMapTypes[i].mapType;
-            let shaderTextuerName = shader.shaderData.getTextureName(mapType);
-            if (shaderTextuerName === undefined) {
-                console.warn("can not find MapType:" + mapType);
-                continue;
-            }
-            let location = _gl.getUniformLocation(shader.getShaderProgram(), shaderTextuerName);
-
-            if (texture.texture.isLoad) {
-                _gl.activeTexture(_gl.TEXTURE0 + i);
-                _gl.bindTexture(_gl.TEXTURE_2D, texture.texture);
-                _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, texture.minFilter);
-                _gl.uniform1i(location, i);
-            } else {
+            if (!texture) 
                 return undefined;
-            }
-            
-            let object = {
-                active: i,
-                texture: texture,
-                location: location,
-            }
-            maps.push(object);
+            let mapType = requestsMapTypes[i].mapType;
+            let location = shader.getMapLocation(mapType);
+            texture.apply(i);
+            _gl.uniform1i(location, i);
         }
 
         return {
             shader: shader,
-            maps: maps,
-        }
+        };
     };
 
     this.renderSingle = function(vertexData, materialData) {
@@ -714,7 +1178,7 @@ CGE.WebGL2Renderer = function() {
         if (!buffer) {
             return;
         }
-        this.bufferGeometryDraw(buffer, material.shader);
+        this.bufferGeometryDraw(buffer, material);
     };
 
     this.render = function(vertexData, shaderData) {
