@@ -269,7 +269,7 @@ CGE.Quaternion = function() {
     this.w = 1;
 };
 
-CGE.Quaternion.prototype = new Vector4();
+CGE.Quaternion.prototype = new CGE.Vector4();
 
 CGE.Quaternion.prototype.identity = function() {
     this.x = 0;
@@ -593,6 +593,12 @@ CGE.Matrix4.prototype.clone = function() {
     return mat4;
 };
 
+//======================================= Component =========================================
+
+CGE.Component = function() {
+
+};
+
 //======================================= BufferGeometry =========================================
 
 CGE.BufferGeometry = function() {
@@ -847,18 +853,15 @@ CGE.BaseMaterial.prototype.getMapRequests = function() {
     ];
 };
 
-//======================================= Component =========================================
-
-CGE.Component = function() {
-
-};
+//======================================= Transform =========================================
 
 CGE.Transform = function() {
     CGE.Component.call(this);
     Object.assign(this, {
-        position: new Vector3();
-        scale: new Vector3();
-        rotate: new Quaternion();
+        position: new CGE.Vector3(),
+        scale: new CGE.Vector3(),
+        rotate: new CGE.Quaternion(),
+        modelMatrix: new CGE.Matrix4(),
     });
 };
 
@@ -867,7 +870,7 @@ CGE.Transform.prototype = new CGE.Component;
 //======================================= Camera =========================================
 
 CGE.Camera = function() {
-    
+
 };
 
 //======================================= WebGL2Renderer =========================================
