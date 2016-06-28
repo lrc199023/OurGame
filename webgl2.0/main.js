@@ -1,8 +1,9 @@
-var CGE = {VERSION:'01'};
+const CGE = {VERSION:'01'};
 CGE.AttribTypeCount = 0;
 CGE.MapTypeCount = 0;
 CGE.UniformCount = 0;
 CGE.materialCount = 0;
+CGE.GLMAT_EPSILON = 0.000001;
 Object.assign( CGE, {
     AttribType : {
         POSITION            : CGE.AttribTypeCount++,
@@ -166,18 +167,27 @@ Object.assign( CGE, {
     materialCount : 0,
     textureCount : 0,
     shaderCount : 0,
+    entityCount : 0,
+    componentCount : 0,
 });
 
 //======================================= Math ===================================================
 // TODO: Math have not completed;
 // Most algorithm copy to glMatrix;
 // -------------- Vector3 ----------------
-CGE.Vector3 = function() {
+CGE.Vector3 = function(x, y, z) {
     Object.assign(this, {
-        x: 0,
-        y: 0,
-        z: 0,
+        x: x || 0,
+        y: y || 0,
+        z: z || 0,
     });
+};
+
+CGE.Vector3.prototype.set = function(x, y, z) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    return this;
 };
 
 CGE.Vector3.prototype.add = function(vec) {
@@ -302,7 +312,7 @@ CGE.Quaternion.prototype.setAxisAngle = function(axis, rad) {
 };
 
 CGE.Quaternion.prototype.invert = function() {
-    var a0 = this.x, a1 = this.y, a2 = this.z, a3 = this.w,
+    let a0 = this.x, a1 = this.y, a2 = this.z, a3 = this.w,
         dot = a0*a0 + a1*a1 + a2*a2 + a3*a3,
         invDot = dot ? 1.0/dot : 0;
     
@@ -340,6 +350,7 @@ CGE.Matrix4.prototype.identity = function(position) {
 
 CGE.Matrix4.prototype.translate = function(position) {
     let m = this.data;
+    let x = position.x, y = position.y, z = position.z;
 
     m[12] += m[0] * x + m[4] * y + m[8] * z;
     m[13] += m[1] * x + m[5] * y + m[9] * z;
@@ -349,9 +360,20 @@ CGE.Matrix4.prototype.translate = function(position) {
     return this;
 };
 
+CGE.Matrix4.prototype.setPosition = function(position) {
+    let m = this.data;
+    let x = position.x, y = position.y, z = position.z;
+
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;;
+
+    return this;
+};
+
 CGE.Matrix4.prototype.rotate = function(axis, rad) {
     let m = this.data;
-    var x = axis.x, y = axis.y, z = axis.z,
+    let x = axis.x, y = axis.y, z = axis.z,
         len = Math.sqrt(x * x + y * y + z * z),
         s, c, t,
         a00, a01, a02, a03,
@@ -361,7 +383,7 @@ CGE.Matrix4.prototype.rotate = function(axis, rad) {
         b10, b11, b12,
         b20, b21, b22;
 
-    if (Math.abs(len) < GLMAT_EPSILON) { return null; }
+    if (Math.abs(len) < CGE.GLMAT_EPSILON) { return null; }
     
     len = 1 / len;
     x *= len;
@@ -404,15 +426,15 @@ CGE.Matrix4.prototype.scale = function(v) {
     m[2] *= v.x;
     m[3] *= v.x;
 
-    m[4] *= v.x;
-    m[5] *= v.x;
-    m[6] *= v.x;
-    m[7] *= v.x;
+    m[4] *= v.y;
+    m[5] *= v.y;
+    m[6] *= v.y;
+    m[7] *= v.y;
 
-    m[8] *= v.x;
-    m[9] *= v.x;
-    m[10] *= v.x;
-    m[11] *= v.x;
+    m[8] *= v.z;
+    m[9] *= v.z;
+    m[10] *= v.z;
+    m[11] *= v.z;
 
     return this;
 };
@@ -431,7 +453,7 @@ CGE.Matrix4.prototype.transpose = function() {
 
 CGE.Matrix4.prototype.identity = function() {
     let m = this.data;
-    var a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3],
+    let a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3],
         a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7],
         a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11],
         a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15],
@@ -547,7 +569,7 @@ CGE.Matrix4.prototype.ortho = function(left, right, bottom, top, near, far) {
     return this;
 };
 
-CGE.Matrix4.prototype.makeForQuat = function(quat) {
+CGE.Matrix4.prototype.makeForQuaternion = function(quat) {
     let m = this.data;
     let x = quat.x, y = quat.y, z = quat.z, w = quat.w,
         x2 = x + x,
@@ -587,6 +609,13 @@ CGE.Matrix4.prototype.makeForQuat = function(quat) {
     return this;
 };
 
+CGE.Matrix4.prototype.compose = function(position, quaternion, scale) {
+    this.makeForQuaternion(quaternion);
+    this.scale(scale);
+    this.setPosition(position);
+    return this;
+};
+
 CGE.Matrix4.prototype.clone = function() {
     let mat4 = new CGE.Matrix4();
     mat4.data = this.data.copyWithin();
@@ -596,7 +625,7 @@ CGE.Matrix4.prototype.clone = function() {
 //======================================= Component =========================================
 
 CGE.Component = function() {
-
+    Object.defineProperty(this, 'id', {writable: false, value: CGE.componentCount++});
 };
 
 //======================================= BufferGeometry =========================================
@@ -608,7 +637,7 @@ CGE.BufferGeometry = function() {
     this.indexData = undefined;
     this.drawParameter = undefined;
 
-    var updateVersion = 0;
+    let updateVersion = 0;
     this.needsUpdate = function() {
         updateVersion++;
     };
@@ -629,7 +658,7 @@ CGE.BufferGeometry.prototype.createAttributeParam = function() {
 };
 
 CGE.BufferGeometry.prototype.addSingleAttribute = function(name, attribute, num, type, data, usage) {
-    var attributeData = {
+    let attributeData = {
         usage: usage || CGE.STATIC_DRAW,
         data: data,
         size: 1,
@@ -647,7 +676,7 @@ CGE.BufferGeometry.prototype.addSingleAttribute = function(name, attribute, num,
 };
 
 CGE.BufferGeometry.prototype.addMultiAttribute = function(attributeParameters, type, stride, data, usage) {
-    var attributeData = {
+    let attributeData = {
         usage: usage || CGE.STATIC_DRAW,
         data: data,
         size: attributeParameters.length,
@@ -693,7 +722,7 @@ CGE.Shader = function() {
     this.requireTextureNames = new Map();
     this.requireRenderLocarions = new Map();
 
-    var updateVersion = 0;
+    let updateVersion = 0;
     this.needsUpdate = function() {
         updateVersion++;
     };
@@ -772,7 +801,7 @@ CGE.Texture = function() {
         minFilter : CGE.LINEAR,
         magFilter : CGE.LINEAR,
     });
-    var updateVersion = 0;
+    let updateVersion = 0;
     this.needsUpdate = function() {
         updateVersion++;
     };
@@ -867,10 +896,22 @@ CGE.Transform = function() {
 
 CGE.Transform.prototype = new CGE.Component;
 
+CGE.Transform.prototype.makeModelMatrix = function() {
+    this.modelMatrix.compose(this.position, this.rotate, this.scale);
+};
+
 //======================================= Camera =========================================
 
 CGE.Camera = function() {
+    CGE.Component.call(this);
+};
 
+CGE.Camera.prototype = new CGE.Component;
+
+//======================================= Entity =========================================
+
+CGE.Entity = function() {
+    Object.defineProperty(this, 'id', {writable: false, value: CGE.entityCount++});
 };
 
 //======================================= WebGL2Renderer =========================================
@@ -878,21 +919,22 @@ CGE.Camera = function() {
 CGE.WebGL2Renderer = function() {
     /// TODO: The Function name MUST use '_' inital that all called _gl function;
 
-    var _canvas = document.createElement('canvas');
+    let _canvas = document.createElement('canvas');
     let _gl = _canvas.getContext('webgl2');
 
     if (_gl === undefined) {
         alert('Can not use webgl 2.0');
+        return undefined;
     }
 
-    var max_fps = 60;
-    var isClearColor = true;
-    var isClearDepth = true;
-    var isClearStencil = false;
+    let max_fps = 60;
+    let isClearColor = true;
+    let isClearDepth = true;
+    let isClearStencil = false;
 
-    var initializedBufferMap = new Map();
-    var initialisedShaderMap = new Map();
-    var initialisedTextureMap = new Map();
+    let initializedBufferMap = new Map();
+    let initialisedShaderMap = new Map();
+    let initialisedTextureMap = new Map();
 
     this.setSize = function(width, height) {
         _canvas.width = width;
@@ -920,13 +962,13 @@ CGE.WebGL2Renderer = function() {
         );
     };
 
-    var vertexBufferData = function() {
+    let vertexBufferData = function() {
         Object.assign(this, {
 
         });
     };
 
-    var GeometryDraw = function(mode, offset, count, type) {
+    let GeometryDraw = function(mode, offset, count, type) {
         Object.assign(this, {
             mode: mode,
             offset: offset,
@@ -938,7 +980,7 @@ CGE.WebGL2Renderer = function() {
         _gl.drawArrays(this.mode, this.offset, this.count);
     };
 
-    var GeometryDrawWithIndex = function(mode, offset, count, type) {
+    let GeometryDrawWithIndex = function(mode, offset, count, type) {
         GeometryDraw.call(this, mode, offset, count, type);
     };
     GeometryDrawWithIndex.prototype = new GeometryDraw();
@@ -947,7 +989,7 @@ CGE.WebGL2Renderer = function() {
         _gl.drawElements(this.mode, this.count, this.type, this.offset);
     };
 
-    var shaderProgram = function(shader, shaderData, mapLocations, uniformLocations) {
+    let shaderProgram = function(shader, shaderData, mapLocations, uniformLocations) {
         this.program = shader;
         this.shaderData = shaderData;
         this.mapLocations = mapLocations;
@@ -970,7 +1012,7 @@ CGE.WebGL2Renderer = function() {
         return this.uniformLocations.get(uniformType);
     };
 
-    var texture2D = function(texture, minFilter, magFilter, wrapS, wrapT) {
+    let texture2D = function(texture, minFilter, magFilter, wrapS, wrapT) {
         Object.assign(this, {
             texture: texture,
             minFilter: minFilter,
@@ -990,19 +1032,19 @@ CGE.WebGL2Renderer = function() {
     };
 
     this.loadVertexData = function(vertexData) {
-        var data = initializedBufferMap.get(vertexData.id);
+        let data = initializedBufferMap.get(vertexData.id);
         if (data !== undefined && data.localVersion === vertexData.getUpdateVersion()) 
             return data.buffer;
         if (vertexData.attributeDatas.length === 0) 
             return undefined;
 
-        var vbos = [];
-        var ibo = undefined;
-        var draw = undefined;
+        let vbos = [];
+        let ibo = undefined;
+        let draw = undefined;
 
-        var drawParameter = vertexData.drawParameter;
+        let drawParameter = vertexData.drawParameter;
         vertexData.attributeDatas.forEach(function(attribute){
-            var vbo = _gl.createBuffer();
+            let vbo = _gl.createBuffer();
             _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
             _gl.bufferData(_gl.ARRAY_BUFFER, attribute.data, attribute.usage);
             _gl.bindBuffer(_gl.ARRAY_BUFFER, null);
@@ -1018,7 +1060,7 @@ CGE.WebGL2Renderer = function() {
             draw = new GeometryDraw(drawParameter.mode, drawParameter.offset, drawParameter.count, 0);
         }
 
-        var bufferData = {
+        let bufferData = {
             vbos: vbos,
             ibo: ibo,
             vao: undefined,
@@ -1034,12 +1076,12 @@ CGE.WebGL2Renderer = function() {
             let vao = _gl.createVertexArray();
             _gl.bindVertexArray(vao);
             let shader = material.shader;
-            for (var i = 0; i < bufferData.vbos.length; i++) {
-                var attribute = bufferData.vertexData.attributeDatas[i];
-                var vbo = bufferData.vbos[i];
+            for (let i = 0; i < bufferData.vbos.length; i++) {
+                let attribute = bufferData.vertexData.attributeDatas[i];
+                let vbo = bufferData.vbos[i];
                 _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
                 attribute.attribPointers.forEach(function(param){
-                    var location = shader.shaderData.getAttribLocation(param.attribute);
+                    let location = shader.shaderData.getAttribLocation(param.attribute);
                     if (location === undefined) 
                         return; 
                     _gl.enableVertexAttribArray(location);
@@ -1059,11 +1101,11 @@ CGE.WebGL2Renderer = function() {
     };
 
     this.loadShaderData = function(shaderData) {
-        var data = initialisedShaderMap.get(shaderData.id);
+        let data = initialisedShaderMap.get(shaderData.id);
         if (data !== undefined && data.localVersion === shaderData.getUpdateVersion()) 
             return data.program;
 
-        var vs = _gl.createShader(_gl.VERTEX_SHADER);
+        let vs = _gl.createShader(_gl.VERTEX_SHADER);
         _gl.shaderSource(vs, shaderData.vertexShaderText);
         _gl.compileShader(vs);
         if (_gl.getShaderParameter(vs, _gl.COMPILE_STATUS) == 0) {
@@ -1073,7 +1115,7 @@ CGE.WebGL2Renderer = function() {
             return undefined;
         }
           
-        var fs = _gl.createShader(_gl.FRAGMENT_SHADER);
+        let fs = _gl.createShader(_gl.FRAGMENT_SHADER);
         _gl.shaderSource(fs, shaderData.fragmentShaderText);
         _gl.compileShader(fs);
         if (_gl.getShaderParameter(fs, _gl.COMPILE_STATUS) == 0) {
@@ -1084,7 +1126,7 @@ CGE.WebGL2Renderer = function() {
             return undefined;
         }
 
-        var program = _gl.createProgram();
+        let program = _gl.createProgram();
         _gl.attachShader(program, vs);
         _gl.attachShader(program, fs);
 
@@ -1173,23 +1215,23 @@ CGE.WebGL2Renderer = function() {
 
     this.renderSingle = function(vertexData, materialData) {
         this.clear(isClearColor, isClearDepth, isClearStencil);
-        var material = this.applyMaterial(materialData);
+        let material = this.applyMaterial(materialData);
         if (!material) {
             return;
         }
-        var buffer = this.loadVertexData(vertexData);
+        let buffer = this.loadVertexData(vertexData);
         if (!buffer) {
             return;
         }
         this.bufferGeometryDraw(buffer, material);
     };
 
-    this.render = function(vertexData, shaderData) {
+    this.render = function(scene, camera) {
 
     };
 };
 
-var vertexShaderText = "#version 300 es\n\
+let vertexShaderText = "#version 300 es\n\
 layout(location = 0) in vec4 Position;\n\
 layout(location = 1) in vec3 Color;\n\
 layout(location = 2) in vec2 UV;\n\
@@ -1208,7 +1250,7 @@ void main()\n\
     gl_Position = Position;\n\
 }";
 
-var fragmentShaderText = "#version 300 es\n\
+let fragmentShaderText = "#version 300 es\n\
 precision mediump float;\n\
 in vec3 o_color; \n\
 in vec2 o_uv; \n\
@@ -1222,7 +1264,7 @@ void main()\n\
 }";
 
 function loop() {
-    var animationframe = self.requestAnimationFrame
+    let animationframe = self.requestAnimationFrame
                         ||self.mozRequestAnimationFrame
                         ||self.webkitRequestAnimationFrame
                         ||self.msRequestAnimationFrame
@@ -1234,7 +1276,7 @@ function loop() {
 	render();
 };
 
-var renderer = new CGE.WebGL2Renderer();
+let renderer = new CGE.WebGL2Renderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
@@ -1244,19 +1286,19 @@ window.onresize = function() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 };
 
-var vertexPositionData = new Float32Array([
+let vertexPositionData = new Float32Array([
     -0.5, 0.5,  0.8, 0.4, 0.4,  0.0, 0.0,
     0.5,  0.5,  0.4, 0.8, 0.4,  1.0, 0.0,
     0,   -0.5,  0.4, 0.4, 0.8,  0.5, 1.0,
 ]);
 
-var indexData = new Uint16Array([
+let indexData = new Uint16Array([
     0, 2, 1,
 ]);
 
-var vertexbuffer = new CGE.BufferGeometry();
+let vertexbuffer = new CGE.BufferGeometry();
 
-var attribs = [
+let attribs = [
     {
         name: 'Position',
         attribute: CGE.AttribType.POSITION, 
@@ -1282,21 +1324,21 @@ vertexbuffer.setIndexData(CGE.UNSIGNED_SHORT, indexData);
 vertexbuffer.setDrawParameter(CGE.TRIANGLES, 3, 0);
 
 
-var shader = new CGE.Shader();
+let shader = new CGE.Shader();
 shader.setShaderText(vertexShaderText, fragmentShaderText);
 shader.addAttribLocation(CGE.AttribType.POSITION, 0);
 shader.addAttribLocation(CGE.AttribType.COLOR, 1);
 shader.addAttribLocation(CGE.AttribType.UV0, 2);
 shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
 
-var texture = new CGE.Texture2d();
+let texture = new CGE.Texture2d();
 texture.setImageSrc('qiang.jpg');
 
-var material = new CGE.BaseMaterial();
+let material = new CGE.BaseMaterial();
 material.setShader(shader);
 material.setDiffuseMap(texture);
 
-var render = function() {
+let render = function() {
     renderer.renderSingle(vertexbuffer, material);
 };
 render();
