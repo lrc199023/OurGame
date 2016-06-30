@@ -534,12 +534,22 @@ CGE.Matrix4.prototype.multiply = function(mat4) {
 CGE.Matrix4.prototype.perspective = function(fovy, aspect, near, far) {
     let f = 1.0 / Math.tan(fovy / 2), 
         nf = 1 / (near - far);
-    this.data = [
-        f / aspect, 0, 0, 0,
-        0, f, 0, 0,
-        0, 0, (far + near) * nf, -1,
-        0, 0, (2 * far * near) * nf, 0,
-    ];
+    this.data[0] = f / aspect;
+    this.data[1] = 0;
+    this.data[2] = 0;
+    this.data[3] = 0;
+    this.data[4] = 0;
+    this.data[5] = f;
+    this.data[6] = 0;
+    this.data[7] = 0;
+    this.data[8] = 0;
+    this.data[9] = 0;
+    this.data[10] = (far + near) * nf;
+    this.data[11] = -1;
+    this.data[12] = 0;
+    this.data[13] = 0;
+    this.data[14] = (2 * far * near) * nf;
+    this.data[15] = 0;
     return this;
 };
 
@@ -547,12 +557,22 @@ CGE.Matrix4.prototype.frustum = function(left, right, bottom, top, near, far) {
     let rl = 1 / (right - left),
         tb = 1 / (top - bottom),
         nf = 1 / (near - far);
-    this.data = [
-        (near * 2) * rl, 0, 0, 0,
-        0, (near * 2) * tb, 0, 0,
-        (right + left) * rl, (top + bottom) * tb, (far + near) * nf, -1,
-        0, 0, (2 * far * near) * nf, 0,
-    ];
+    this.data[0] = (near * 2) * rl;
+    this.data[1] = 0;
+    this.data[2] = 0;
+    this.data[3] = 0;
+    this.data[4] = 0;
+    this.data[5] = (near * 2) * tb;
+    this.data[6] = 0;
+    this.data[7] = 0;
+    this.data[8] = (right + left) * rl;
+    this.data[9] = (top + bottom) * tb;
+    this.data[10] = (far + near) * nf;
+    this.data[11] = -1;
+    this.data[12] = 0;
+    this.data[13] = 0;
+    this.data[14] = (2 * far * near) * nf;
+    this.data[15] = 0;
     return this;
 };
 
@@ -560,12 +580,22 @@ CGE.Matrix4.prototype.ortho = function(left, right, bottom, top, near, far) {
     let lr = 1 / (left - right),
         bt = 1 / (bottom - top),
         nf = 1 / (near - far);
-    this.data = [
-        -2 * lr, 0, 0, 0,
-        0, -2 * bt, 0, 0,
-        0, 0, 2 * nf, 0,
-        (left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1,
-    ];
+    this.data[0] = -2 * lr;
+    this.data[1] = 0;
+    this.data[2] = 0;
+    this.data[3] = 0;
+    this.data[4] = 0;
+    this.data[5] = -2 * bt;
+    this.data[6] = 0;
+    this.data[7] = 0;
+    this.data[8] = 0;
+    this.data[9] = 0;
+    this.data[10] = 2 * nf;
+    this.data[11] = 0;
+    this.data[12] = (left + right) * lr;
+    this.data[13] = (top + bottom) * bt;
+    this.data[14] = (far + near) * nf;
+    this.data[15] = 1;
     return this;
 };
 
@@ -904,9 +934,58 @@ CGE.Transform.prototype.makeModelMatrix = function() {
 
 CGE.Camera = function() {
     CGE.Component.call(this);
+    Object.assign(this, {
+        zFar: 2000.0,
+        zNear: 0.1,
+        projection: new CGE.Matrix4()
+    });
 };
 
-CGE.Camera.prototype = new CGE.Component;
+Object.defineProperty(CGE.Camera, 'Ortho', {writable: false, value: 0});
+Object.defineProperty(CGE.Camera, 'Perspective', {writable: false, value: 1});
+
+CGE.Camera.prototype = new CGE.Component();
+
+CGE.Camera.prototype.updateProjectionMatrix = function() {
+
+};
+
+CGE.OtrhoCamera = function(left, right, bottom, top, near, far) {
+    CGE.Camera.call(this);
+    Object.assign(this, {
+        type: CGE.Camera.Ortho,
+        far: far || 2000.0,
+        near: near || 0.1,
+        left: left, 
+        right: right, 
+        bottom: bottom, 
+        top: top,
+    });
+    this.updateProjectionMatrix();
+};
+
+CGE.OtrhoCamera.prototype = new CGE.Camera();
+
+CGE.OtrhoCamera.prototype.updateProjectionMatrix = function() {
+    this.projection.ortho(this.left, this.right, this.bottom, this.top, this.near, this.far);
+};
+
+CGE.PerspectiveCamera = function(fov, aspect, near, far) {
+    CGE.Camera.call(this);
+    Object.assign(this, {
+        type: CGE.Camera.Perspective,
+        fovy: fov,
+        aspect: aspect,
+        far: far || 2000.0,
+        near: near || 0.1,
+    });
+};
+
+CGE.PerspectiveCamera.prototype = new CGE.Camera();
+
+CGE.PerspectiveCamera.prototype.updateProjectionMatrix = function() {
+    this.projection.perspective(this.fov, this.aspect, this.near, this.far);
+};
 
 //======================================= Entity =========================================
 
@@ -1230,116 +1309,3 @@ CGE.WebGL2Renderer = function() {
 
     };
 };
-
-let vertexShaderText = "#version 300 es\n\
-layout(location = 0) in vec4 Position;\n\
-layout(location = 1) in vec3 Color;\n\
-layout(location = 2) in vec2 UV;\n\
-out vec3 o_color;\n\
-out vec2 o_uv; \n\
-uniform MatrixBlock \n\
-{ \n\
-  mat4 projection; \n\
-  mat4 modelview; \n\
-}; \n\
-void main()\n\
-{\n\
-    o_color = Color;\n\
-    o_uv = UV;\n\
-    vec4 pos = Position * projection * modelview; \n\
-    gl_Position = Position;\n\
-}";
-
-let fragmentShaderText = "#version 300 es\n\
-precision mediump float;\n\
-in vec3 o_color; \n\
-in vec2 o_uv; \n\
-layout(location = 0) out vec4 fragColor;\n\
-uniform sampler2D diffuse;\n\
-\n\
-void main()\n\
-{\n\
-    vec4 color = texture(diffuse, o_uv);\n\
-    fragColor = vec4(color.xyz, 1.0);\n\
-}";
-
-function loop() {
-    let animationframe = self.requestAnimationFrame
-                        ||self.mozRequestAnimationFrame
-                        ||self.webkitRequestAnimationFrame
-                        ||self.msRequestAnimationFrame
-                        ||self.oRequestAnimationFrame
-                        ||function(a){
-        setTimeout(a, 1000/60);
-    };
-	animationframe(loop);
-	render();
-};
-
-let renderer = new CGE.WebGL2Renderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
-renderer.clear(true);
-
-document.body.appendChild(renderer.getCanvas());
-window.onresize = function() {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-};
-
-let vertexPositionData = new Float32Array([
-    -0.5, 0.5,  0.8, 0.4, 0.4,  0.0, 0.0,
-    0.5,  0.5,  0.4, 0.8, 0.4,  1.0, 0.0,
-    0,   -0.5,  0.4, 0.4, 0.8,  0.5, 1.0,
-]);
-
-let indexData = new Uint16Array([
-    0, 2, 1,
-]);
-
-let vertexbuffer = new CGE.BufferGeometry();
-
-let attribs = [
-    {
-        name: 'Position',
-        attribute: CGE.AttribType.POSITION, 
-        num: 2,
-        offset: 0,
-    },
-    {
-        name: 'Color',
-        attribute: CGE.AttribType.COLOR, 
-        num: 3,
-        offset: vertexPositionData.BYTES_PER_ELEMENT * 2,
-    },
-    {
-        name: 'UV0',
-        attribute: CGE.AttribType.UV0, 
-        num: 2,
-        offset: vertexPositionData.BYTES_PER_ELEMENT * 5,
-    },
-];
-
-vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT,  vertexPositionData.BYTES_PER_ELEMENT * 7, vertexPositionData);
-vertexbuffer.setIndexData(CGE.UNSIGNED_SHORT, indexData);
-vertexbuffer.setDrawParameter(CGE.TRIANGLES, 3, 0);
-
-
-let shader = new CGE.Shader();
-shader.setShaderText(vertexShaderText, fragmentShaderText);
-shader.addAttribLocation(CGE.AttribType.POSITION, 0);
-shader.addAttribLocation(CGE.AttribType.COLOR, 1);
-shader.addAttribLocation(CGE.AttribType.UV0, 2);
-shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
-
-let texture = new CGE.Texture2d();
-texture.setImageSrc('qiang.jpg');
-
-let material = new CGE.BaseMaterial();
-material.setShader(shader);
-material.setDiffuseMap(texture);
-
-let render = function() {
-    renderer.renderSingle(vertexbuffer, material);
-};
-render();
-loop();
