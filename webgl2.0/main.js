@@ -2,7 +2,6 @@ const CGE = {VERSION:'01'};
 CGE.AttribTypeCount = 0;
 CGE.MapTypeCount = 0;
 CGE.UniformCount = 0;
-CGE.materialCount = 0;
 CGE.GLMAT_EPSILON = 0.000001;
 Object.assign( CGE, {
     AttribType : {
@@ -173,7 +172,7 @@ Object.assign( CGE, {
 
 //======================================= Math ===================================================
 // TODO: Math have not completed;
-// Most algorithm copy to glMatrix;
+// Most code copy to glMatrix.js;
 // -------------- Vector3 ----------------
 CGE.Vector3 = function(x, y, z) {
     Object.assign(this, {
@@ -251,7 +250,15 @@ CGE.Vector4 = function() {
     });
 };
 
-CGE.Vector4.applyMatrix4 = function(mat4){
+CGE.Vector4.prototype.set = function(x, y, z, w) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.w = w;
+    return this;
+};
+
+CGE.Vector4.prototype.applyMatrix4 = function(mat4){
     let x = this.x, y = this.y, z = this.z, w = this.w, m = mat4.data;
     this.x = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
     this.y = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
@@ -658,6 +665,10 @@ CGE.Component = function() {
     Object.defineProperty(this, 'id', {writable: false, value: CGE.componentCount++});
 };
 
+CGE.Component.prototype.update = function() {
+
+};
+
 //======================================= BufferGeometry =========================================
 
 CGE.BufferGeometry = function() {
@@ -725,10 +736,10 @@ CGE.BufferGeometry.prototype.addMultiAttribute = function(attributeParameters, t
     this.attributeDatas.push(attributeData);
 };
 
-CGE.BufferGeometry.prototype.setIndexData = function(type, data, usage) {
+CGE.BufferGeometry.prototype.setIndexData = function(data, type, usage) {
     this.indexData = {
-        type : type,
         data : data,
+        type : type || CGE.UNSIGNED_SHORT,
         usage : usage || CGE.STATIC_DRAW,
     };
 };
@@ -914,30 +925,90 @@ CGE.BaseMaterial.prototype.getMapRequests = function() {
 
 //======================================= Transform =========================================
 
-CGE.Transform = function() {
+CGE.Transform = function(position, rotate, scale) {
     CGE.Component.call(this);
     Object.assign(this, {
-        position: new CGE.Vector3(),
-        scale: new CGE.Vector3(),
-        rotate: new CGE.Quaternion(),
-        modelMatrix: new CGE.Matrix4(),
+        position: position || new CGE.Vector3(),
+        rotate: rotate || new CGE.Quaternion(),
+        scale: scale || new CGE.Vector3(),
+        matrix: new CGE.Matrix4(),
+        needsUpdate: true,
+    });
+    this.makeMatrix();
+};
+
+CGE.Transform.prototype = new CGE.Component();
+
+CGE.Transform.prototype.setNeedUpdateMatrix = function() {
+    this.needsUpdate = true;
+};
+
+CGE.Transform.prototype.update = function() {
+    this.makeMatrix();
+};
+
+CGE.Transform.prototype.setPosition = function(position) {
+    this.position.set(position.x, position.y, position.z);
+    this.setNeedUpdateMatrix();
+};
+
+CGE.Transform.prototype.getPosition = function() {
+    return this.position;
+};
+
+CGE.Transform.prototype.setRotate = function(rotate) {
+    this.rotate.set(position.x, position.y, position.z, rotate.w);
+    this.setNeedUpdateMatrix();
+};
+
+CGE.Transform.prototype.getRotate = function() {
+    return this.rotate;
+};
+
+CGE.Transform.prototype.setScale = function(scale) {
+    this.scale.set(scale.x, scale.y, scale.z);
+    this.setNeedUpdateMatrix();
+};
+
+CGE.Transform.prototype.getScale = function() {
+    return this.scale;
+};
+
+CGE.Transform.prototype.getMatrix = function() {
+    this.makeMatrix();
+    return this.matrix;
+};
+
+CGE.Transform.prototype.makeMatrix = function() {
+    if (this.needsUpdate) {
+        this.matrix.compose(this.position, this.rotate, this.scale);
+        this.needsUpdate = false;
+    }
+};
+
+//======================================= Mesh =========================================
+
+CGE.Mesh = function(geometry, material) {
+    CGE.Component.call(this);
+    Object.assign(this, {
+        geometry: geometry,
+        material: material,
+        transform: new CGE.Transform(),
     });
 };
 
-CGE.Transform.prototype = new CGE.Component;
-
-CGE.Transform.prototype.makeModelMatrix = function() {
-    this.modelMatrix.compose(this.position, this.rotate, this.scale);
-};
+CGE.Mesh.prototype = new CGE.Component();
 
 //======================================= Camera =========================================
 
 CGE.Camera = function() {
+    // TODO: apply component;
     CGE.Component.call(this);
     Object.assign(this, {
         zFar: 2000.0,
         zNear: 0.1,
-        projection: new CGE.Matrix4()
+        projection: new CGE.Matrix4(),
+        transform: new CGE.Transform(),
     });
 };
 
@@ -946,11 +1017,23 @@ Object.defineProperty(CGE.Camera, 'Perspective', {writable: false, value: 1});
 
 CGE.Camera.prototype = new CGE.Component();
 
-CGE.Camera.prototype.updateProjectionMatrix = function() {
+CGE.Camera.prototype.getTransform = function() {
+    return this.transform;
+};
+
+CGE.Camera.prototype.update = function() {
+    this.makeProjectionMatrix();
+};
+
+CGE.Camera.prototype.makeProjectionMatrix = function() {
 
 };
 
-CGE.OtrhoCamera = function(left, right, bottom, top, near, far) {
+CGE.Camera.prototype.getViewProjectionMatrix = function() {
+
+};
+
+CGE.OrthoCamera = function(left, right, bottom, top, near, far) {
     CGE.Camera.call(this);
     Object.assign(this, {
         type: CGE.Camera.Ortho,
@@ -964,9 +1047,9 @@ CGE.OtrhoCamera = function(left, right, bottom, top, near, far) {
     this.updateProjectionMatrix();
 };
 
-CGE.OtrhoCamera.prototype = new CGE.Camera();
+CGE.OrthoCamera.prototype = new CGE.Camera();
 
-CGE.OtrhoCamera.prototype.updateProjectionMatrix = function() {
+CGE.OrthoCamera.prototype.makeProjectionMatrix = function() {
     this.projection.ortho(this.left, this.right, this.bottom, this.top, this.near, this.far);
 };
 
@@ -974,16 +1057,17 @@ CGE.PerspectiveCamera = function(fov, aspect, near, far) {
     CGE.Camera.call(this);
     Object.assign(this, {
         type: CGE.Camera.Perspective,
-        fovy: fov,
-        aspect: aspect,
         far: far || 2000.0,
         near: near || 0.1,
+        fovy: fov,
+        aspect: aspect,
     });
+    this.updateProjectionMatrix();
 };
 
 CGE.PerspectiveCamera.prototype = new CGE.Camera();
 
-CGE.PerspectiveCamera.prototype.updateProjectionMatrix = function() {
+CGE.PerspectiveCamera.prototype.makeProjectionMatrix = function() {
     this.projection.perspective(this.fov, this.aspect, this.near, this.far);
 };
 
@@ -991,6 +1075,14 @@ CGE.PerspectiveCamera.prototype.updateProjectionMatrix = function() {
 
 CGE.Entity = function() {
     Object.defineProperty(this, 'id', {writable: false, value: CGE.entityCount++});
+    Object.assign(this, {
+        components : [],
+    });
+    this.addComponent = function(component) {
+        if (component instanceof CGE.Component) {
+            this.components.push(component);
+        }
+    };
 };
 
 //======================================= WebGL2Renderer =========================================
@@ -1237,7 +1329,7 @@ CGE.WebGL2Renderer = function() {
             localVersion: shaderData.getUpdateVersion(),
         });
         return sProgram;
-    };
+    };  
 
     this.loadTexture2DData = function(textureData) {
         let data = initialisedTextureMap.get(textureData.id);

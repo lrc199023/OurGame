@@ -53,6 +53,14 @@ window.onresize = function() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 };
 
+window.onmousemove = function(event) {
+    // console.log(event);
+};
+
+window.onkeydown = function(event) {
+    // console.log(event);
+};
+
 let vertexPositionData = new Float32Array([
     -0.5, 0.5,  0.8, 0.4, 0.4,  0.0, 0.0,
     0.5,  0.5,  0.4, 0.8, 0.4,  1.0, 0.0,
@@ -86,8 +94,8 @@ let attribs = [
     },
 ];
 
-vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT,  vertexPositionData.BYTES_PER_ELEMENT * 7, vertexPositionData);
-vertexbuffer.setIndexData(CGE.UNSIGNED_SHORT, indexData);
+vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_ELEMENT * 7, vertexPositionData);
+vertexbuffer.setIndexData(indexData);
 vertexbuffer.setDrawParameter(CGE.TRIANGLES, 3, 0);
 
 
@@ -104,6 +112,8 @@ texture.setImageSrc('qiang.jpg');
 let material = new CGE.BaseMaterial();
 material.setShader(shader);
 material.setDiffuseMap(texture);
+
+let mesh = new CGE.Mesh(vertexbuffer, material);
 
 let render = function() {
     renderer.renderSingle(vertexbuffer, material);
