@@ -210,7 +210,7 @@ CGE.Vector3.prototype.dot = function(vec) {
 CGE.Vector3.prototype.cross = function(vec3) {
     let ax = this.x, ay = this.y, az = this.z,
         bx = vec3.x, by = vec3.y, bz = vec3.z;
-    let vec = new new CGE.Vector3();
+    let vec = new CGE.Vector3();
     vec.x = ay * bz - az * by;
     vec.y = az * bx - ax * bz;
     vec.z = ax * by - ay * bx;
@@ -228,6 +228,15 @@ CGE.Vector3.prototype.normalize = function() {
     this.x *= length_inverse;
     this.y *= length_inverse;
     this.z *= length_inverse;
+    return this;
+};
+
+CGE.Vector3.prototype.applyMatrix4 = function(matrix) {
+    let x = this.x, y = this.y, z = this.z;
+    let m = matrix.data;
+    this.x = m[0] * x + m[4] * y + m[8] * z + m[12];
+    this.y = m[1] * x + m[5] * y + m[9] * z + m[13];
+    this.z = m[2] * x + m[6] * y + m[10] * z + m[14];
     return this;
 };
 
@@ -258,12 +267,25 @@ CGE.Vector4.prototype.set = function(x, y, z, w) {
     return this;
 };
 
-CGE.Vector4.prototype.applyMatrix4 = function(mat4){
+CGE.Vector4.prototype.applyMatrix4 = function(mat4) {
     let x = this.x, y = this.y, z = this.z, w = this.w, m = mat4.data;
     this.x = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
     this.y = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
     this.z = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
     this.w = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
+    return this;
+};
+
+CGE.Vector4.prototype.normalize = function() {
+    let x = this.x, y = this.y, z = this.z, w = this.w;
+    let len = x*x + y*y + z*z + w*w;
+    if (len > 0) {
+        len = 1 / Math.sqrt(len);
+        this.x = x * len;
+        this.y = y * len;
+        this.z = z * len;
+        this.w = w * len;
+    }
     return this;
 };
 
@@ -318,17 +340,46 @@ CGE.Quaternion.prototype.setAxisAngle = function(axis, rad) {
     return this;
 };
 
+CGE.Quaternion.prototype.rotationTo = function(vec1, vec2) {
+    let v1 = vec1.clone().normalize();
+    let v2 = vec2.clone().normalize();
+    let dot = v1.dot(v2);
+    if (dot < -0.999999) {
+        let tmpvec3 = new CGE.Vector3(1,0,0).cross(v1);
+        if (tmpvec3.length() < 0.000001) {
+            tmpvec3 = new CGE.Vector3(0,1,0).cross(v2);
+        }
+        tmpvec3.normalize();
+        this.setAxisAngle(tmpvec3, Math.PI)
+        return this;
+    } else if (dot > 0.999999) {
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.w = 1;
+        return this;
+    } else {
+        let tmpvec3 = v1.clone().cross(v2);
+        this.x = tmpvec3.x;
+        this.y = tmpvec3.y;
+        this.z = tmpvec3.z;
+        this.w = 1 + dot;
+        this.normalize();
+        return this;
+    }
+};
+
 CGE.Quaternion.prototype.invert = function() {
     let a0 = this.x, a1 = this.y, a2 = this.z, a3 = this.w,
-        dot = a0*a0 + a1*a1 + a2*a2 + a3*a3,
-        invDot = dot ? 1.0/dot : 0;
+        dot = a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3,
+        invDot = dot ? 1.0 / dot : 0;
     
     // TODO: Would be waiting for glMatrix lib update;
 
-    this.x = -a0*invDot;
-    this.y = -a1*invDot;
-    this.z = -a2*invDot;
-    this.w = a3*invDot;
+    this.x = -a0 * invDot;
+    this.y = -a1 * invDot;
+    this.z = -a2 * invDot;
+    this.w = a3 * invDot;
 
     return this;
 };
@@ -535,6 +586,48 @@ CGE.Matrix4.prototype.multiply = function(mat4) {
     a[13] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
     a[14] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
     a[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+    return this;
+};
+
+CGE.Matrix4.prototype.applyMatrix4 = function(mat4) {
+    return this.multiply(mat4);
+};
+
+CGE.Matrix4.prototype.lookAt = function(eye, center, up) {
+    let vec_z = eye.clone().sub(center);
+    vec_z.normalize();
+
+    let vec_x = up.cross(vec_z);
+    vec_x.normalize();
+
+    let vec_y = vec_z.cross(vec_x);
+    vec_y.normalize();
+
+    let m = this.data;
+
+    m[0] = vec_x.x;
+    m[1] = vec_y.x;
+    m[2] = vec_z.x;
+    m[3] = 0;
+    m[4] = vec_x.y;
+    m[5] = vec_y.y;
+    m[6] = vec_z.y;
+    m[7] = 0;
+    m[8] = vec_x.z;
+    m[9] = vec_y.z;
+    m[10] = vec_z.z;
+    m[11] = 0;
+    m[12] = 0;//-(x0 * eyex + x1 * eyey + x2 * eyez);
+    m[13] = 0;//-(y0 * eyex + y1 * eyey + y2 * eyez);
+    m[14] = 0;//-(z0 * eyex + z1 * eyey + z2 * eyez);
+    m[15] = 1;
+
+    let vec3 = eye.clone().applyMatrix4(this);
+
+    m[12] = -vec3.x;
+    m[13] = -vec3.y;
+    m[14] = -vec3.z;
+
     return this;
 };
 
@@ -1009,6 +1102,9 @@ CGE.Camera = function() {
         zNear: 0.1,
         projection: new CGE.Matrix4(),
         transform: new CGE.Transform(),
+        eye: new CGE.Vector3(),
+        center: new CGE.Vector3(),
+        up: new CGE.Vector3(),
     });
 };
 
@@ -1030,6 +1126,12 @@ CGE.Camera.prototype.makeProjectionMatrix = function() {
 };
 
 CGE.Camera.prototype.getViewProjectionMatrix = function() {
+    let mat4 = this.projection.clone();
+    mat4.applyMatrix4(this.transform.getMatrix());
+    return mat4;
+};
+
+CGE.Camera.prototype.applyMatrix4 = function(matrix) {
 
 };
 

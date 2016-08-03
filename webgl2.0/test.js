@@ -118,5 +118,13 @@ let mesh = new CGE.Mesh(vertexbuffer, material);
 let render = function() {
     renderer.renderSingle(vertexbuffer, material);
 };
+
+let test_mat4 = new CGE.Matrix4();
+
+let position = new CGE.Vector3(0, 0, 0);
+let rotate = new CGE.Quaternion();
+rotate.setAxisAngle(new CGE.Vector3(0, 1, 0), 0.5 * Math.PI);
+let scale = new CGE.Vector3(1,1,1);
+
 render();
 loop();
