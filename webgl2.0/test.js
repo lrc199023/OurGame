@@ -4,16 +4,11 @@ layout(location = 1) in vec3 Color;\n\
 layout(location = 2) in vec2 UV;\n\
 out vec3 o_color;\n\
 out vec2 o_uv; \n\
-uniform MatrixBlock \n\
-{ \n\
-  mat4 projection; \n\
-  mat4 modelview; \n\
-}; \n\
 void main()\n\
 {\n\
     o_color = Color;\n\
     o_uv = UV;\n\
-    vec4 pos = Position * projection * modelview; \n\
+    vec4 pos = Position; \n\
     gl_Position = Position;\n\
 }";
 
@@ -31,11 +26,11 @@ void main()\n\
 }";
 
 function loop() {
-    let animationframe = self.requestAnimationFrame
-                        ||self.mozRequestAnimationFrame
-                        ||self.webkitRequestAnimationFrame
-                        ||self.msRequestAnimationFrame
-                        ||self.oRequestAnimationFrame
+    let animationframe = this.requestAnimationFrame
+                        ||this.mozRequestAnimationFrame
+                        ||this.webkitRequestAnimationFrame
+                        ||this.msRequestAnimationFrame
+                        ||this.oRequestAnimationFrame
                         ||function(a){
         setTimeout(a, 1000/60);
     };
@@ -125,6 +120,19 @@ let position = new CGE.Vector3(0, 0, 0);
 let rotate = new CGE.Quaternion();
 rotate.setAxisAngle(new CGE.Vector3(0, 1, 0), 0.5 * Math.PI);
 let scale = new CGE.Vector3(1,1,1);
+
+let xmlHttp = new XMLHttpRequest();
+
+xmlHttp.onreadystatechange = function() {
+    if (xmlHttp.readyState === 4 && xmlHttp.status === 200) {
+        console.log(xmlHttp.responseText);
+    }
+}
+
+xmlHttp.open('GET', './box01.obj', true);
+xmlHttp.send(null);
+
+
 
 render();
 loop();

@@ -1,4 +1,4 @@
-const CGE = {VERSION:'01'};
+const CGE = { VERSION:'01' };
 CGE.AttribTypeCount = 0;
 CGE.MapTypeCount = 0;
 CGE.UniformCount = 0;
@@ -231,12 +231,27 @@ CGE.Vector3.prototype.normalize = function() {
     return this;
 };
 
-CGE.Vector3.prototype.applyMatrix4 = function(matrix) {
+CGE.Vector3.prototype.applyMatrix4 = function(mat4) {
     let x = this.x, y = this.y, z = this.z;
-    let m = matrix.data;
+    let m = mat4.data;
     this.x = m[0] * x + m[4] * y + m[8] * z + m[12];
     this.y = m[1] * x + m[5] * y + m[9] * z + m[13];
     this.z = m[2] * x + m[6] * y + m[10] * z + m[14];
+    return this;
+};
+
+CGE.Vector3.prototype.applyQuaternion = function(quat) {
+    let x = this.x, y = this.y, z = this.z,
+        qx = quat.x, qy = quat.y, qz = quat.z, qw = quat.w;
+
+    let ix = qw * x + qy * z - qz * y,
+        iy = qw * y + qz * x - qx * z,
+        iz = qw * z + qx * y - qy * x,
+        iw = -qx * x - qy * y - qz * z;
+
+    this.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+    this.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+    this.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
     return this;
 };
 
@@ -267,15 +282,6 @@ CGE.Vector4.prototype.set = function(x, y, z, w) {
     return this;
 };
 
-CGE.Vector4.prototype.applyMatrix4 = function(mat4) {
-    let x = this.x, y = this.y, z = this.z, w = this.w, m = mat4.data;
-    this.x = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
-    this.y = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
-    this.z = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
-    this.w = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
-    return this;
-};
-
 CGE.Vector4.prototype.normalize = function() {
     let x = this.x, y = this.y, z = this.z, w = this.w;
     let len = x*x + y*y + z*z + w*w;
@@ -286,6 +292,15 @@ CGE.Vector4.prototype.normalize = function() {
         this.z = z * len;
         this.w = w * len;
     }
+    return this;
+};
+
+CGE.Vector4.prototype.applyMatrix4 = function(mat4) {
+    let x = this.x, y = this.y, z = this.z, w = this.w, m = mat4.data;
+    this.x = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
+    this.y = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
+    this.z = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
+    this.w = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
     return this;
 };
 
@@ -384,15 +399,67 @@ CGE.Quaternion.prototype.invert = function() {
     return this;
 };
 
+CGE.Quaternion.prototype.setFromRotationMatrix = function(mat4) {
+    // copy for THREE.js same function;
+    let te = mat4.data,
+
+        m11 = te[ 0 ], m12 = te[ 4 ], m13 = te[ 8 ],
+        m21 = te[ 1 ], m22 = te[ 5 ], m23 = te[ 9 ],
+        m31 = te[ 2 ], m32 = te[ 6 ], m33 = te[ 10 ],
+
+        trace = m11 + m22 + m33,
+        s;
+
+    if ( trace > 0 ) {
+
+        s = 0.5 / Math.sqrt( trace + 1.0 );
+
+        this.w = 0.25 / s;
+        this.x = ( m32 - m23 ) * s;
+        this.y = ( m13 - m31 ) * s;
+        this.z = ( m21 - m12 ) * s;
+
+    } else if ( m11 > m22 && m11 > m33 ) {
+
+        s = 2.0 * Math.sqrt( 1.0 + m11 - m22 - m33 );
+
+        this.w = ( m32 - m23 ) / s;
+        this.x = 0.25 * s;
+        this.y = ( m12 + m21 ) / s;
+        this.z = ( m13 + m31 ) / s;
+
+    } else if ( m22 > m33 ) {
+
+        s = 2.0 * Math.sqrt( 1.0 + m22 - m11 - m33 );
+
+        this.w = ( m13 - m31 ) / s;
+        this.x = ( m12 + m21 ) / s;
+        this.y = 0.25 * s;
+        this.z = ( m23 + m32 ) / s;
+
+    } else {
+
+        s = 2.0 * Math.sqrt( 1.0 + m33 - m11 - m22 );
+
+        this.w = ( m21 - m12 ) / s;
+        this.x = ( m13 + m31 ) / s;
+        this.y = ( m23 + m32 ) / s;
+        this.z = 0.25 * s;
+
+    }
+
+    return this;
+};
+
 // -------------- Matrix4 ----------------
 
 CGE.Matrix4 = function() {
-    this.data = [
+    this.data = new Float32Array([
         1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
         0, 0, 0, 1,
-    ];
+    ]);
 };
 
 CGE.Matrix4.prototype.identity = function(position) {
@@ -739,10 +806,108 @@ CGE.Matrix4.prototype.makeForQuaternion = function(quat) {
     return this;
 };
 
+CGE.Matrix4.prototype.determinant = function () {
+    var te = this.data;
+
+    var n11 = te[ 0 ], n12 = te[ 4 ], n13 = te[ 8 ], n14 = te[ 12 ];
+    var n21 = te[ 1 ], n22 = te[ 5 ], n23 = te[ 9 ], n24 = te[ 13 ];
+    var n31 = te[ 2 ], n32 = te[ 6 ], n33 = te[ 10 ], n34 = te[ 14 ];
+    var n41 = te[ 3 ], n42 = te[ 7 ], n43 = te[ 11 ], n44 = te[ 15 ];
+
+    //TODO: make this more efficient
+    // copy to THREE.js;
+    //( based on http://www.euclideanspace.com/maths/algebra/matrix/functions/inverse/fourD/index.htm )
+
+    return (
+        n41 * (
+            + n14 * n23 * n32
+             - n13 * n24 * n32
+             - n14 * n22 * n33
+             + n12 * n24 * n33
+             + n13 * n22 * n34
+             - n12 * n23 * n34
+        ) +
+        n42 * (
+            + n11 * n23 * n34
+             - n11 * n24 * n33
+             + n14 * n21 * n33
+             - n13 * n21 * n34
+             + n13 * n24 * n31
+             - n14 * n23 * n31
+        ) +
+        n43 * (
+            + n11 * n24 * n32
+             - n11 * n22 * n34
+             - n14 * n21 * n32
+             + n12 * n21 * n34
+             + n14 * n22 * n31
+             - n12 * n24 * n31
+        ) +
+        n44 * (
+            - n13 * n22 * n31
+             - n11 * n23 * n32
+             + n11 * n22 * n33
+             + n13 * n21 * n32
+             - n12 * n21 * n33
+             + n12 * n23 * n31
+        )
+
+    );
+};
+
 CGE.Matrix4.prototype.compose = function(position, quaternion, scale) {
     this.makeForQuaternion(quaternion);
     this.scale(scale);
     this.setPosition(position);
+    return this;
+};
+
+CGE.Matrix4.prototype.decompose = function(position, quaternion, scale) {
+    let vector = new CGE.Vector3();
+    let matrix = new CGE.Matrix4();
+
+    let te = this.data;
+
+    let sx = vector.set( te[ 0 ], te[ 1 ], te[ 2 ] ).length();
+    let sy = vector.set( te[ 4 ], te[ 5 ], te[ 6 ] ).length();
+    let sz = vector.set( te[ 8 ], te[ 9 ], te[ 10 ] ).length();
+
+    // if determine is negative, we need to invert one scale
+    var det = this.determinant();
+    if ( det < 0 ) {
+        sx = - sx;
+    }
+
+    position.x = te[ 12 ];
+    position.y = te[ 13 ];
+    position.z = te[ 14 ];
+
+    // scale the rotation part
+
+    matrix.data.set( this.data ); // at this point matrix is incomplete so we can't use .copy()
+
+    var invSX = 1 / sx;
+    var invSY = 1 / sy;
+    var invSZ = 1 / sz;
+
+    matrix.data[ 0 ] *= invSX;
+    matrix.data[ 1 ] *= invSX;
+    matrix.data[ 2 ] *= invSX;
+
+    matrix.data[ 4 ] *= invSY;
+    matrix.data[ 5 ] *= invSY;
+    matrix.data[ 6 ] *= invSY;
+
+    matrix.data[ 8 ] *= invSZ;
+    matrix.data[ 9 ] *= invSZ;
+    matrix.data[ 10 ] *= invSZ;
+
+    quaternion.setFromRotationMatrix( matrix );
+
+    scale.x = sx;
+    scale.y = sy;
+    scale.z = sz;
+
     return this;
 };
 
@@ -1079,6 +1244,15 @@ CGE.Transform.prototype.makeMatrix = function() {
     }
 };
 
+CGE.Transform.prototype.decompose = function() {
+    this.matrix.decompose(this.position, this.rotate, this.scale);
+};
+
+CGE.Transform.prototype.applyMatrix4 = function(mat4) {
+    this.matrix.applyMatrix4(mat4);
+    this.decompose();
+};
+
 //======================================= Mesh =========================================
 
 CGE.Mesh = function(geometry, material) {
@@ -1096,12 +1270,11 @@ CGE.Mesh.prototype = new CGE.Component();
 
 CGE.Camera = function() {
     // TODO: apply component;
-    CGE.Component.call(this);
+    CGE.Transform.call(this);
     Object.assign(this, {
         zFar: 2000.0,
         zNear: 0.1,
         projection: new CGE.Matrix4(),
-        transform: new CGE.Transform(),
         eye: new CGE.Vector3(),
         center: new CGE.Vector3(),
         up: new CGE.Vector3(),
@@ -1111,7 +1284,7 @@ CGE.Camera = function() {
 Object.defineProperty(CGE.Camera, 'Ortho', {writable: false, value: 0});
 Object.defineProperty(CGE.Camera, 'Perspective', {writable: false, value: 1});
 
-CGE.Camera.prototype = new CGE.Component();
+CGE.Camera.prototype = new CGE.Transform();
 
 CGE.Camera.prototype.getTransform = function() {
     return this.transform;
@@ -1131,8 +1304,15 @@ CGE.Camera.prototype.getViewProjectionMatrix = function() {
     return mat4;
 };
 
-CGE.Camera.prototype.applyMatrix4 = function(matrix) {
+CGE.Camera.prototype.applyMatrix4 = function(mat4) {
+    CGE.Transform.call(this);
+    this.eye.applyMatrix4(mat4);
+    this.center.applyMatrix4(mat4);
+    this.up.applyMatrix4(mat4);
+};
 
+CGE.Camera.prototype.lookAt = function(eye, center, up) {
+    this.transform.getMatrix().lookAt(eye, center, up);
 };
 
 CGE.OrthoCamera = function(left, right, bottom, top, near, far) {
