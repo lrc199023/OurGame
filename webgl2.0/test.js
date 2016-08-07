@@ -4,12 +4,12 @@ layout(location = 1) in vec3 Color;\n\
 layout(location = 2) in vec2 UV;\n\
 out vec3 o_color;\n\
 out vec2 o_uv; \n\
+uniform mat4 mvpMatrix; \n\
 void main()\n\
 {\n\
     o_color = Color;\n\
     o_uv = UV;\n\
-    vec4 pos = Position; \n\
-    gl_Position = Position;\n\
+    gl_Position = mvpMatrix * Position;\n\
 }";
 
 let fragmentShaderText = "#version 300 es\n\
@@ -43,9 +43,18 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
 
+let camera = new CGE.PerspectiveCamera(0.33333*Math.PI, window.innerWidth / window.innerHeight);
+camera.setPosition(new CGE.Vector3(2, 3, 2));
+camera.lookAt(new CGE.Vector3(0,0,0));
+camera.update();
+
 document.body.appendChild(renderer.getCanvas());
 window.onresize = function() {
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    renderer.setSize(width, height);
+    camera.resize(width, height);
+    camera.update();
 };
 
 window.onmousemove = function(event) {
@@ -100,6 +109,7 @@ shader.addAttribLocation(CGE.AttribType.POSITION, 0);
 shader.addAttribLocation(CGE.AttribType.COLOR, 1);
 shader.addAttribLocation(CGE.AttribType.UV0, 2);
 shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
+shader.addUniformName(CGE.UniformType.MVPMatrix, 'mvpMatrix');
 
 let texture = new CGE.Texture2d();
 texture.setImageSrc('qiang.jpg');
@@ -111,7 +121,8 @@ material.setDiffuseMap(texture);
 let mesh = new CGE.Mesh(vertexbuffer, material);
 
 let render = function() {
-    renderer.renderSingle(vertexbuffer, material);
+    // renderer.renderSingle(vertexbuffer, material);
+    renderer.renderMesh(mesh, camera);
 };
 
 let test_mat4 = new CGE.Matrix4();

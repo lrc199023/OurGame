@@ -263,6 +263,12 @@ CGE.Vector3.prototype.clone = function() {
     return vec;
 };
 
+CGE.Vector3.prototype.copy = function(vec3) {
+    this.x = vec3.x;
+    this.y = vec3.y;
+    this.z = vec3.z;
+};
+
 // -------------- Vector4 ----------------
 
 CGE.Vector4 = function() {
@@ -913,7 +919,7 @@ CGE.Matrix4.prototype.decompose = function(position, quaternion, scale) {
 
 CGE.Matrix4.prototype.clone = function() {
     let mat4 = new CGE.Matrix4();
-    mat4.data = this.data.copyWithin();
+    mat4.data.set(this.data);
     return mat4;
 };
 
@@ -1188,7 +1194,7 @@ CGE.Transform = function(position, rotate, scale) {
     Object.assign(this, {
         position: position || new CGE.Vector3(),
         rotate: rotate || new CGE.Quaternion(),
-        scale: scale || new CGE.Vector3(),
+        scale: scale || new CGE.Vector3(1, 1, 1),
         matrix: new CGE.Matrix4(),
         needsUpdate: true,
     });
@@ -1233,7 +1239,6 @@ CGE.Transform.prototype.getScale = function() {
 };
 
 CGE.Transform.prototype.getMatrix = function() {
-    this.makeMatrix();
     return this.matrix;
 };
 
@@ -1252,6 +1257,8 @@ CGE.Transform.prototype.applyMatrix4 = function(mat4) {
     this.matrix.applyMatrix4(mat4);
     this.decompose();
 };
+
+CGE.Transform.worldUp = new CGE.Vector3(0, 0, 1);
 
 //======================================= Mesh =========================================
 
@@ -1275,9 +1282,8 @@ CGE.Camera = function() {
         zFar: 2000.0,
         zNear: 0.1,
         projection: new CGE.Matrix4(),
-        eye: new CGE.Vector3(),
         center: new CGE.Vector3(),
-        up: new CGE.Vector3(),
+        up: CGE.Transform.worldUp.clone(),
     });
 };
 
@@ -1286,33 +1292,47 @@ Object.defineProperty(CGE.Camera, 'Perspective', {writable: false, value: 1});
 
 CGE.Camera.prototype = new CGE.Transform();
 
-CGE.Camera.prototype.getTransform = function() {
-    return this.transform;
-};
-
 CGE.Camera.prototype.update = function() {
-    this.makeProjectionMatrix();
+    if (this.needsUpdate) {
+        this.lookAt(this.center);
+        this.makeProjectionMatrix();
+        this.needsUpdate = false;
+    }
 };
 
-CGE.Camera.prototype.makeProjectionMatrix = function() {
-
-};
+CGE.Camera.prototype.makeProjectionMatrix = function() {};
 
 CGE.Camera.prototype.getViewProjectionMatrix = function() {
     let mat4 = this.projection.clone();
-    mat4.applyMatrix4(this.transform.getMatrix());
+    mat4.applyMatrix4(this.getMatrix());
     return mat4;
 };
 
+CGE.Camera.prototype.makeMatrix = function() {
+    this.lookAt(this.center);
+}
+
 CGE.Camera.prototype.applyMatrix4 = function(mat4) {
-    CGE.Transform.call(this);
+    CGE.Transform.prototype.applyMatrix4.call(this, mat4);
     this.eye.applyMatrix4(mat4);
     this.center.applyMatrix4(mat4);
     this.up.applyMatrix4(mat4);
 };
 
-CGE.Camera.prototype.lookAt = function(eye, center, up) {
-    this.transform.getMatrix().lookAt(eye, center, up);
+CGE.Camera.prototype.setUp = function(up) {
+    this.up.copy(up);
+    this.setNeedUpdateMatrix();
+};
+
+CGE.Camera.prototype.lookAt = function(center) {
+    if (center) {
+        this.center.copy(center);
+        this.matrix.lookAt(this.position, center, this.up);
+    }
+};
+
+CGE.Camera.prototype.resize = function(width, height) {
+    this.setNeedUpdateMatrix();
 };
 
 CGE.OrthoCamera = function(left, right, bottom, top, near, far) {
@@ -1326,10 +1346,22 @@ CGE.OrthoCamera = function(left, right, bottom, top, near, far) {
         bottom: bottom, 
         top: top,
     });
-    this.updateProjectionMatrix();
+    this.makeProjectionMatrix();
 };
 
 CGE.OrthoCamera.prototype = new CGE.Camera();
+
+CGE.OrthoCamera.prototype.resize = function(width, height) {
+    CGE.Camera.prototype.resize.call(this);
+    let xCenter = (this.right - this.left) * 0.5 + this.left;
+    let yCenter = (this.bottom - this.top) * 0.5 + this.top;
+    let halfWidth = width * 0.5;
+    let halfHeight = height * 0.5;
+    this.left = xCenter - halfWidth;
+    thie.right = xCenter + halfWidth;
+    this.top = yCenter - halfHeight;
+    this.bottom = yCenter + halfHeight;
+};
 
 CGE.OrthoCamera.prototype.makeProjectionMatrix = function() {
     this.projection.ortho(this.left, this.right, this.bottom, this.top, this.near, this.far);
@@ -1344,13 +1376,18 @@ CGE.PerspectiveCamera = function(fov, aspect, near, far) {
         fovy: fov,
         aspect: aspect,
     });
-    this.updateProjectionMatrix();
+    this.makeProjectionMatrix();
 };
 
 CGE.PerspectiveCamera.prototype = new CGE.Camera();
 
+CGE.PerspectiveCamera.prototype.resize = function(width, height) {
+    CGE.Camera.prototype.resize.call(this);
+    this.aspect = width / height;
+};
+
 CGE.PerspectiveCamera.prototype.makeProjectionMatrix = function() {
-    this.projection.perspective(this.fov, this.aspect, this.near, this.far);
+    this.projection.perspective(this.fovy, this.aspect, this.near, this.far);
 };
 
 //======================================= Entity =========================================
@@ -1388,6 +1425,10 @@ CGE.WebGL2Renderer = function() {
     let initializedBufferMap = new Map();
     let initialisedShaderMap = new Map();
     let initialisedTextureMap = new Map();
+
+    let vpMatrix = new CGE.Matrix4();
+    vpMatrix.scale(0.5);
+
 
     this.setSize = function(width, height) {
         _canvas.width = width;
@@ -1606,6 +1647,8 @@ CGE.WebGL2Renderer = function() {
 
         let sProgram = new shaderProgram(program, shaderData, mapLocations, uniformLocations);
 
+
+        // TODO: add new function to do this;
         initialisedShaderMap.set(shaderData.id, {
             program: sProgram, 
             localVersion: shaderData.getUpdateVersion(),
@@ -1661,6 +1704,10 @@ CGE.WebGL2Renderer = function() {
             _gl.uniform1i(location, i);
         }
 
+        shader.uniformLocations.forEach(function(value, key) {
+            _gl.uniformMatrix4fv(value, false, vpMatrix.data);
+        });
+
         return {
             shader: shader,
         };
@@ -1673,6 +1720,20 @@ CGE.WebGL2Renderer = function() {
             return;
         }
         let buffer = this.loadVertexData(vertexData);
+        if (!buffer) {
+            return;
+        }
+        this.bufferGeometryDraw(buffer, material);
+    };
+
+    this.renderMesh = function(mesh, camera) {
+        this.clear(isClearColor, isClearDepth, isClearStencil);
+        vpMatrix = camera.getViewProjectionMatrix();
+        let material = this.applyMaterial(mesh.material);
+        if (!material) {
+            return;
+        }
+        let buffer = this.loadVertexData(mesh.geometry);
         if (!buffer) {
             return;
         }
