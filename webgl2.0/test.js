@@ -1,3 +1,5 @@
+// import CGE from './main.js'
+
 let vertexShaderText = "#version 300 es\n\
 layout(location = 0) in vec4 Position;\n\
 layout(location = 1) in vec3 Color;\n\
@@ -26,11 +28,11 @@ void main()\n\
 }";
 
 function loop() {
-    let animationframe = this.requestAnimationFrame
-                        ||this.mozRequestAnimationFrame
-                        ||this.webkitRequestAnimationFrame
-                        ||this.msRequestAnimationFrame
-                        ||this.oRequestAnimationFrame
+    let animationframe = window.requestAnimationFrame
+                        ||window.mozRequestAnimationFrame
+                        ||window.webkitRequestAnimationFrame
+                        ||window.msRequestAnimationFrame
+                        ||window.oRequestAnimationFrame
                         ||function(a){
         setTimeout(a, 1000/60);
     };
@@ -44,7 +46,7 @@ renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
 
 let camera = new CGE.PerspectiveCamera(0.33333*Math.PI, window.innerWidth / window.innerHeight);
-camera.setPosition(new CGE.Vector3(2, 3, 2));
+camera.setPosition(new CGE.Vector3(-4, 0, 4));
 camera.lookAt(new CGE.Vector3(0,0,0));
 camera.update();
 
@@ -55,6 +57,7 @@ window.onresize = function() {
     renderer.setSize(width, height);
     camera.resize(width, height);
     camera.update();
+    render();
 };
 
 window.onmousemove = function(event) {
@@ -119,6 +122,7 @@ material.setShader(shader);
 material.setDiffuseMap(texture);
 
 let mesh = new CGE.Mesh(vertexbuffer, material);
+mesh.transform.setPosition(new CGE.Vector3(1,0,0));
 
 let render = function() {
     // renderer.renderSingle(vertexbuffer, material);
@@ -127,23 +131,30 @@ let render = function() {
 
 let test_mat4 = new CGE.Matrix4();
 
-let position = new CGE.Vector3(0, 0, 0);
+let position = new CGE.Vector3(1, 2, 3);
 let rotate = new CGE.Quaternion();
 rotate.setAxisAngle(new CGE.Vector3(0, 1, 0), 0.5 * Math.PI);
 let scale = new CGE.Vector3(1,1,1);
+
+let test_m1 = new CGE.Matrix4();
+test_m1.setPosition(position);
+
+let test_m2 = new CGE.Matrix4();
+test_m2.makeForQuaternion(rotate);
+
+test_mat4.copy(test_m1).applyMatrix4(test_m2);
+
 
 let xmlHttp = new XMLHttpRequest();
 
 xmlHttp.onreadystatechange = function() {
     if (xmlHttp.readyState === 4 && xmlHttp.status === 200) {
-        console.log(xmlHttp.responseText);
+        console.log('test_xmlHttp_ok');
     }
 }
 
 xmlHttp.open('GET', './box01.obj', true);
 xmlHttp.send(null);
-
-
 
 render();
 loop();
