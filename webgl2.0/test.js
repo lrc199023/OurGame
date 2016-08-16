@@ -45,7 +45,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
 
-let camera = new CGE.PerspectiveCamera(0.33333*Math.PI, window.innerWidth / window.innerHeight);
+let camera = new CGE.Camera(window.innerWidth, window.innerHeight);
 camera.setPosition(new CGE.Vector3(-4, 0, 4));
 camera.lookAt(new CGE.Vector3(0,0,0));
 camera.update();
