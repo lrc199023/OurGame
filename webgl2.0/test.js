@@ -144,6 +144,25 @@ test_m2.makeForQuaternion(rotate);
 
 test_mat4.copy(test_m1).applyMatrix4(test_m2);
 
+let eye = new CGE.Vector3(-4,0,4);
+let center2 = new CGE.Vector3(0,0,0); 
+let up = new CGE.Vector3(0,0,1);
+
+let vec_x = center2.clone().sub(eye);
+vec_x.normalize();
+
+let vec_y = up.cross(vec_x);
+vec_y.normalize();
+
+let vec_z = vec_x.cross(vec_y);
+vec_z.normalize();
+let m = new CGE.Matrix4();
+m.makeBasis(vec_x, vec_y, vec_z);
+// m.setPosition(eye);
+
+let test_vx = new CGE.Vector3(1,0,0);
+let test_vy = new CGE.Vector3(0,1,0);
+let test_vz = new CGE.Vector3(0,0,1);
 
 let xmlHttp = new XMLHttpRequest();
 
