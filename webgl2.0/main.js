@@ -1,3 +1,4 @@
+'use strict';
 const CGE = { VERSION:'01' };
 CGE.AttribTypeCount = 0;
 CGE.MapTypeCount = 0;
@@ -31,7 +32,7 @@ Object.assign( CGE, {
         OTHER4              : CGE.MapTypeCount++,
     },
 
-    UniformType : {
+    UniformType: {
         //W : world, 
         //M : model, 
         //V : view, 
@@ -174,7 +175,7 @@ Object.assign( CGE, {
     UNSIGNED_SHORT_5_5_5_1         : 0x8034,
     UNSIGNED_SHORT_5_6_5           : 0x8363,
 
-    ObjectCount : 0,
+    ObjectCount: 0,
 });
 
 //======================================= Math ===================================================
@@ -419,7 +420,7 @@ CGE.Quaternion.prototype = Object.assign(Object.create(CGE.Vector4.prototype), {
             dot = a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3,
             invDot = dot ? 1.0 / dot : 0;
         
-        // TODO: Would be waiting for glMatrix lib update;
+        // TODO: Would be waiting for glMatrix.js lib update;
 
         this.x = -a0 * invDot;
         this.y = -a1 * invDot;
@@ -979,54 +980,66 @@ Object.assign(CGE.Object.prototype, {
     update: function() {},
 });
 
-//======================================= BufferGeometry =========================================
+//======================================= VersionObject =========================================
 
-CGE.BufferGeometry = function() {
+CGE.VersionObject = function() {
     CGE.Object.call(this);
-    this.needUpdate = 0;
-    this.attributeDatas = [];
-    this.indexData = undefined;
-    this.drawParameter = undefined;
 
-    let updateVersion = 0;
+    let _updateVersion = 0;
     this.needsUpdate = function() {
-        updateVersion++;
+        _updateVersion++;
     };
 
     this.getUpdateVersion = function(version) {
-        return updateVersion;
+        return _updateVersion;
     };
 };
 
-CGE.BufferGeometry.prototype = Object.assign(Object.create(CGE.Object.prototype), {
+CGE.VersionObject.prototype = Object.assign(Object.create(CGE.Object.prototype), {
+    constructor: CGE.VersionObject,
+});
+
+//======================================= BufferGeometry =========================================
+
+CGE.BufferGeometry = function() {
+    CGE.VersionObject.call(this);
+    Object.assign(this, {
+        _attributeDatas: [],
+        _indexData: undefined,
+        _drawParameter: undefined,
+    });
+};
+
+CGE.BufferGeometry.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
     constructor: CGE.BufferGeometry,
 
     createAttributeParam: function() {
         return {
-            data : undefined,
-            size : 0,
-            type : undefined,
-            stride : 0,
-            attribPointers : [],
+            data: undefined,
+            size: 0,
+            type: undefined,
+            stride: 0,
+            attribPointers: [],
+            usage: undefined,
         };
     },
 
     addSingleAttribute: function(name, attribute, num, type, data, usage) {
         let attributeData = {
-            usage: usage || CGE.STATIC_DRAW,
             data: data,
             size: 1,
             type: type,
             stride: 0,
             attribPointers: [],
+            usage: usage || CGE.STATIC_DRAW,
         };
         attributeData.attribPointers.push({
-            name : name,
-            attribute : attribute,
-            num : num,
-            offset : 0,
+            name: name,
+            attribute: attribute,
+            num: num,
+            offset: 0,
         });
-        this.attributeDatas.push(attributeData);
+        this._attributeDatas.push(attributeData);
     },
 
     addMultiAttribute: function(attributeParameters, type, stride, data, usage) {
@@ -1040,173 +1053,259 @@ CGE.BufferGeometry.prototype = Object.assign(Object.create(CGE.Object.prototype)
         };
         attributeParameters.forEach(function(param) {
             attributeData.attribPointers.push({
-                name : param.name,
-                attribute : param.attribute,
-                num : param.num,
-                offset : param.offset,
+                name: param.name,
+                attribute: param.attribute,
+                num: param.num,
+                offset: param.offset,
             });
         });
-        this.attributeDatas.push(attributeData);
+        this._attributeDatas.push(attributeData);
+    },
+
+    getAttributeDatas: function() {
+        return this._attributeDatas;
     },
 
     setIndexData: function(data, type, usage) {
-        this.indexData = {
-            data : data,
-            type : type || CGE.UNSIGNED_SHORT,
-            usage : usage || CGE.STATIC_DRAW,
+        this._indexData = {
+            data: data,
+            type: type || CGE.UNSIGNED_SHORT,
+            usage: usage || CGE.STATIC_DRAW,
         };
     },
 
-    setDrawParameter: function(mode, count, offset) {
-        this.drawParameter = {
-            mode : mode,
-            count : count,
-            offset : offset,
+    getIndexData: function() {
+        return this._indexData;
+    },
+
+    setDrawParameter: function(count, mode, offset) {
+        this._drawParameter = {
+            mode: mode || CGE.TRIANGLES,
+            count: count || 0,
+            offset: offset || 0,
         };
     },
+
+    getDrawParameter: function() {
+        return this._drawParameter;
+    },
+
 });
 
 //======================================= Shader =========================================
 
 CGE.Shader = function() {
-    CGE.Object.call(this);
-    this.vertexShaderText = '';
-    this.fragmentShaderText = '';
-    this.requireAttributeLocations = new Map();
-    this.requireUniformNames = new Map();
-    this.requireTextureNames = new Map();
-    this.requireRenderLocarions = new Map();
-
-    let updateVersion = 0;
-    this.needsUpdate = function() {
-        updateVersion++;
-    };
-
-    this.getUpdateVersion = function(version) {
-        return updateVersion;
-    };
+    CGE.VersionObject.call(this);
+    Object.assign(this, {
+        _vertexShaderText: '',
+        _fragmentShaderText: '',
+        _requireAttributeLocations: new Map(),
+        _requireUniformNames: new Map(),
+        _requireTextureNames: new Map(),
+        _requireRenderLocarions: new Map(),
+    });
 };
 
-CGE.Shader.prototype = Object.assign(Object.create(CGE.Object.prototype), {
+CGE.Shader.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
     constructor: CGE.Shader,
 
-    setShaderText: function(vs, fs) {
-        this.vertexShaderText = vs;
-        this.fragmentShaderText = fs;
+    setShaderText: function(vsText, fsText) {
+        this._vertexShaderText = vsText;
+        this._fragmentShaderText = fsText;
+    },
+
+    getVertexShaderText: function() {
+        return this._vertexShaderText;
+    },
+
+    getFragmentShaderText: function() {
+        return this._fragmentShaderText;
     },
 
     addAttribLocation: function(attribType, location) {
-        this.requireAttributeLocations.set(attribType, location);
+        this._requireAttributeLocations.set(attribType, location);
     },
 
     addAttribLocations: function(array) {
         array.forEach(function(object){
-            this.requireAttributeLocations.set(object.type, object.location);
+            this._requireAttributeLocations.set(object.type, object.location);
         });
     },
 
     getAttribLocation: function(attribType) {
-        return this.requireAttributeLocations.get(attribType);
+        return this._requireAttributeLocations.get(attribType);
+    },
+
+    getAttribLocationMap: function() {
+        return this._requireAttributeLocations;
     },
 
     addUniformName: function(uniformType, name) {
-        this.requireUniformNames.set(uniformType, name);
+        this._requireUniformNames.set(uniformType, name);
     },
 
     addUniformNames: function(array) {
         array.forEach(function(object){
-            this.requireUniformNames.set(object.type, object.name);
+            this._requireUniformNames.set(object.type, object.name);
         });
     },
 
     getUniformName: function(uniformType) {
-        return this.requireUniformNames.get(uniformType);
+        return this._requireUniformNames.get(uniformType);
+    },
+
+    getUniformNameMap: function() {
+        return this._requireUniformNames;
     },
 
     addTextureName: function(mapType, name) {
-        this.requireTextureNames.set(mapType, name);
+        this._requireTextureNames.set(mapType, name);
     },
 
     addTextureNames: function(array) {
         array.forEach(function(object){
-            this.requireTextureNames.set(object.type, object.name);
-        });
-    },
-
-    addTextureNames: function(array) {
-        array.forEach(function(object){
-            this.requireTextureNames.set(object.type, object.name);
+            this._requireTextureNames.set(object.type, object.name);
         });
     },
 
     getTextureName: function(mapType) {
-        return this.requireTextureNames.get(mapType);
+        return this._requireTextureNames.get(mapType);
+    },
+
+    getTextureNameMap: function() {
+        return this._requireTextureNames;
     },
 
     addRenderLocation: function(renderType, location) {
-        this.requireRenderLocarions.set(renderType, location);
+        this._requireRenderLocarions.set(renderType, location);
     },
 
     addRenderLocation: function(array) {
         array.forEach(function(object){
-            this.requireRenderLocarions.set(object.type, object.location);
+            this._requireRenderLocarions.set(object.type, object.location);
         });
     },
 
     getRenderLocation: function(renderType) {
-        return this.requireRenderLocarions.get(renderType);
+        return this._requireRenderLocarions.get(renderType);
+    },
+
+    getRenderLocationMap: function() {
+        return this._requireRenderLocarions;
     },
 });
 
 //======================================= Texture2d =========================================
 
 CGE.Texture = function() {
-    CGE.Object.call(this);
+    CGE.VersionObject.call(this);
     Object.assign(this, {
-        minFilter : CGE.LINEAR,
-        magFilter : CGE.LINEAR,
+        _minFilter: CGE.LINEAR,
+        _magFilter: CGE.LINEAR,
+        _format: CGE.RGB,
+        _internalformat: CGE.RGB,
+        _type: CGE.UNSIGNED_BYTE,
     });
-    let updateVersion = 0;
-    this.needsUpdate = function() {
-        updateVersion++;
-    };
-
-    this.getUpdateVersion = function(version) {
-        return updateVersion;
-    };
 };
 
+CGE.Texture.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
+    constructor: CGE.Texture,
+
+    setFilter: function(min, mag) {
+        this._minFilter = min || CGE.LINEAR;
+        this._magFilter = mag || CGE.LINEAR;
+    },
+
+    getMinFilter: function() {
+        return this._minFilter;
+    },
+
+    getMagFilter: function() {
+        return this._magFilter;
+    },
+
+    setFormat: function(src, internal) {
+        this._format = src || CGE.RGB;
+        this._internalformat = internal || src || CGE.RGB;
+    },
+
+    getFormat: function() {
+        return this._format;
+    },
+
+    getInternalformat: function() {
+        return this._internalformat;
+    },
+
+    setType: function(type) {
+        this._type = type;
+    },
+
+    getType: function() {
+        return this._type;
+    },
+
+});
+
 CGE.Texture2d = function() {
+    // TODO: Add another class to loading form img file;
     CGE.Texture.call(this);
     Object.assign(this, {
-        wrapS : CGE.CLAMP_TO_EDGE,
-        wrapT : CGE.CLAMP_TO_EDGE,
+        _wrapS: CGE.CLAMP_TO_EDGE,
+        _wrapT: CGE.CLAMP_TO_EDGE,
+        _img: undefined,
+        _isLoad: false,
+        _width: 0,
+        _height: 0,
     });
-    this.img = undefined;
-    this.isLoad = false;
-    this.format = CGE.RGB;
-    this.internalformat = CGE.RGB;
-    this.type = CGE.UNSIGNED_BYTE;
-    this.width = 0;
-    this.height = 0;
 };
 
 CGE.Texture2d.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
     constructor: CGE.Texture2d,
 
     setImageSrc: function(src) {
+        this._isLoad = false;
         let img = new Image()
         img.onload = function() {
-            this.isLoad = true;
-            // TODO: cull image size;
+            this._isLoad = true;
+            // TODO: add cull image size;
         }.bind(this);
         img.src = src;
-        this.img = img;
+        this._img = img;
+    },
+
+    getImage: function() {
+        return this._img;
+    },
+
+    getWidth: function() {
+        return this._width;
+    },
+
+    getHeight: function() {
+        return this._height;
+    },
+
+    setWarp: function(wrapS, wrapT) {
+        this._wrapS = wrapS;
+        this._wrapT = wrapT;
+    },
+
+    getWrapS: function() {
+        return this._wrapS;
+    },
+
+    getWrapT: function() {
+        return this._wrapT;
+    },
+
+    isLoad: function() {
+        return this._isLoad;
     },
 
     setSize: function(width, height) {
-        this.width = width;
-        this.height = height;
+        this._width = width;
+        this._height = height;
     },
 });
 
@@ -1215,15 +1314,20 @@ CGE.Texture2d.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
 CGE.Material = function() {
     CGE.Object.call(this);
     Object.assign(this, {
-        shaderData : undefined,
+        _shader: undefined,
+        // TODO: add render state;
     });
 };
 
 CGE.Material.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     constructor: CGE.Material,
 
-    setShader: function(shaderData) {
-        this.shaderData = shaderData;
+    setShader: function(shader) {
+        this._shader = shader;
+    },
+
+    getShader: function(shader) {
+        return this._shader;
     },
 
     getMapRequests: function() {
@@ -1234,22 +1338,68 @@ CGE.Material.prototype = Object.assign(Object.create(CGE.Object.prototype), {
 CGE.BaseMaterial = function() {
     CGE.Material.call(this);
     Object.assign(this, {
-       diffuseMap : undefined,
+       _diffuseMap: undefined,
     });
+    let shader = CGE.BaseMaterial.getShader();
+    Object.defineProperty(this, "_shader", { value:shader, writable:false });
 };
+
+Object.assign(CGE.BaseMaterial, {
+    getShader: function() {
+        let shader = undefined;
+        return function getShader() {
+            if (CGE.BaseMaterial.shader === undefined) {
+                let vertexShaderText = "#version 300 es\n\
+                layout(location = 0) in vec4 Position;\n\
+                layout(location = 1) in vec3 Color;\n\
+                layout(location = 2) in vec2 UV;\n\
+                out vec3 o_color;\n\
+                out vec2 o_uv; \n\
+                uniform mat4 mvpMatrix; \n\
+                void main()\n\
+                {\n\
+                    o_color = Color;\n\
+                    o_uv = UV;\n\
+                    gl_Position = mvpMatrix * Position;\n\
+                }";
+
+                let fragmentShaderText = "#version 300 es\n\
+                precision mediump float;\n\
+                in vec3 o_color; \n\
+                in vec2 o_uv; \n\
+                layout(location = 0) out vec4 fragColor;\n\
+                uniform sampler2D diffuse;\n\
+                \n\
+                void main()\n\
+                {\n\
+                    vec4 color = texture(diffuse, o_uv);\n\
+                    fragColor = vec4(color.xyz, 1.0);\n\
+                }";
+                shader = new CGE.Shader();
+                shader.setShaderText(vertexShaderText, fragmentShaderText);
+                shader.addAttribLocation(CGE.AttribType.POSITION, 0);
+                shader.addAttribLocation(CGE.AttribType.COLOR, 1);
+                shader.addAttribLocation(CGE.AttribType.UV0, 2);
+                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
+                shader.addUniformName(CGE.UniformType.MVPMatrix, 'mvpMatrix');
+            }
+            return shader;
+        };
+    }(),
+});
 
 CGE.BaseMaterial.prototype = Object.assign(Object.create(CGE.Material.prototype), {
     constructor: CGE.BaseMaterial,
 
     setDiffuseMap: function(map) {
-        this.diffuseMap = map;
+        this._diffuseMap = map;
     },
 
     getMapRequests: function() {
         return [
             {
-                map: this.diffuseMap,
-                mapType: CGE.MapType.DIFFUSE,
+                map: this._diffuseMap,
+                type: CGE.MapType.DIFFUSE,
             },
         ];
     },
@@ -1260,11 +1410,11 @@ CGE.BaseMaterial.prototype = Object.assign(Object.create(CGE.Material.prototype)
 CGE.Transform = function(position, rotate, scale) {
     CGE.Object.call(this);
     Object.assign(this, {
-        position: position || new CGE.Vector3(),
-        rotate: rotate || new CGE.Quaternion(),
-        scale: scale || new CGE.Vector3(1, 1, 1),
-        matrix: new CGE.Matrix4(),
-        needsUpdate: true,
+        _position: position || new CGE.Vector3(),
+        _rotate: rotate || new CGE.Quaternion(),
+        _scale: scale || new CGE.Vector3(1, 1, 1),
+        _matrix: new CGE.Matrix4(),
+        _needsUpdate: true,
     });
     this.makeMatrix();
 };
@@ -1273,7 +1423,7 @@ CGE.Transform.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     constructor: CGE.Transform,
 
     setNeedUpdateMatrix: function() {
-        this.needsUpdate = true;
+        this._needsUpdate = true;
     },
 
     update: function() {
@@ -1281,49 +1431,49 @@ CGE.Transform.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     },
 
     setPosition: function(position) {
-        this.position.set(position.x, position.y, position.z);
+        this._position.set(position.x, position.y, position.z);
         this.setNeedUpdateMatrix();
     },
 
     getPosition: function() {
-        return this.position;
+        return this._position;
     },
 
     setRotate: function(rotate) {
-        this.rotate.set(position.x, position.y, position.z, rotate.w);
+        this._rotate.set(position.x, position.y, position.z, rotate.w);
         this.setNeedUpdateMatrix();
     },
 
     getRotate: function() {
-        return this.rotate;
+        return this._rotate;
     },
 
     setScale: function(scale) {
-        this.scale.set(scale.x, scale.y, scale.z);
+        this._scale.set(scale.x, scale.y, scale.z);
         this.setNeedUpdateMatrix();
     },
 
     getScale: function() {
-        return this.scale;
+        return this._scale;
     },
 
     getMatrix: function() {
-        return this.matrix;
+        return this._matrix;
     },
 
     makeMatrix: function() {
-        if (this.needsUpdate) {
-            this.matrix.compose(this.position, this.rotate, this.scale);
-            this.needsUpdate = false;
+        if (this._needsUpdate) {
+            this._matrix.compose(this._position, this._rotate, this._scale);
+            this._needsUpdate = false;
         }
     },
 
     decompose: function() {
-        this.matrix.decompose(this.position, this.rotate, this.scale);
+        this._matrix.decompose(this._position, this._rotate, this._scale);
     },
 
     applyMatrix4: function(mat4) {
-        this.matrix.applyMatrix4(mat4);
+        this._matrix.applyMatrix4(mat4);
         this.decompose();
     },
 
@@ -1331,9 +1481,9 @@ CGE.Transform.prototype = Object.assign(Object.create(CGE.Object.prototype), {
         let e = initEye === undefined ? new CGE.Vector3(0,0,0) : initEye.clone();
         let c = initCenter === undefined ? new CGE.Vector3(1,0,0) : initCenter.clone();
         let u = initUp === undefined ? new CGE.Vector3(0,0,1) : initUp.clone();
-        e.applyMatrix4(this.matrix);
-        c.applyMatrix4(this.matrix);
-        u.applyMatrix4(this.matrix);
+        e.applyMatrix4(this._matrix);
+        c.applyMatrix4(this._matrix);
+        u.applyMatrix4(this._matrix);
         let mat = new CGE.Matrix4();
         mat.lookAt(e, c, u);
         return mat;
@@ -1342,18 +1492,19 @@ CGE.Transform.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     lookAt: function(center, up) {
         let c = center.clone();
         let u = up === undefined ? new CGE.Vector3(0,0,1) : up.clone();
-        this.matrix.lookAt(this.position, c, u);
-        this.matrix.invert();
+        this._matrix.lookAt(this.position, c, u);
+        this._matrix.invert();
         this.decompose();
-    }
+    },
 });
 
-CGE.Transform.worldUp = new CGE.Vector3(0, 0, 1);
+CGE.Transform.worldUp = new CGE.Vector3(0, 0, 1); // TODO: move this to another position;
 
 //======================================= Camera =========================================
 
 CGE.Camera = function(width, height, fovy, near, far) {
-    // TODO: remove transform;
+    // TODO: Remove transform;
+    // TODO: I have forgot todo things;
     CGE.Transform.call(this);
     let w = (width || 800) * 0.5;
     let h = (height || 600) * 0.5;
@@ -1381,10 +1532,10 @@ CGE.Camera.prototype = Object.assign(Object.create(CGE.Transform.prototype), {
     constructor: CGE.Camera,
 
     update: function() {
-        if (this.needsUpdate) {
+        if (this._needsUpdate) {
             this.lookAt(this.center);
             this.makeProjectionMatrix();
-            this.needsUpdate = false;
+            this._needsUpdate = false;
         }
     },
 
@@ -1450,7 +1601,7 @@ CGE.Camera.prototype = Object.assign(Object.create(CGE.Transform.prototype), {
     lookAt: function(center) {
         if (center) {
             this.center.copy(center);
-            this.matrix.lookAt(this.position, center, this.up);
+            this._matrix.lookAt(this._position, center, this.up);
         }
     },
 
@@ -1472,46 +1623,56 @@ CGE.Camera.prototype = Object.assign(Object.create(CGE.Transform.prototype), {
 
 CGE.Component = function(object, componentType) {
     CGE.Object.call(this);
-    this.parent = undefined;
-    this.object = object;
-    this.type = componentType;
+    Object.assign(this, {
+        _entity: undefined,
+        _object: object,
+        _type: componentType,
+    });
 };
 
 CGE.Component.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     constructor: CGE.Component,
 
     update: function() {
-        this.object.update();
+        this._object.update();
     },
 
     getObject: function() {
-        return this.object;
+        return this._object;
     },
 
     getType: function() {
-        return this.type;
+        return this._type;
+    },
+
+    setEntity: function(entity) {
+        this._entity = entity;
+    },
+
+    getEntity: function(entity) {
+        return this._entity;
     },
 });
 
 Object.assign(CGE.Component, {
-    createTransfromComponent: function(transform) {
-        return new Component(transform, CGE.ComponentType.Transform);
+    CreateTransfromComponent: function(transform) {
+        return new CGE.Component(transform, CGE.ComponentType.Transform);
     },
 
-    createGeometryComponent: function(geometry) {
-        return new Component(geometry, CGE.ComponentType.Geometry);
+    CreateGeometryComponent: function(geometry) {
+        return new CGE.Component(geometry, CGE.ComponentType.Geometry);
     },
 
-    createMaterialComponent: function(material) {
-        return new Component(material, CGE.ComponentType.Material);
+    CreateMaterialComponent: function(material) {
+        return new CGE.Component(material, CGE.ComponentType.Material);
     },
 
-    createCameraComponent: function(camera) {
-        return new Component(camera, CGE.ComponentType.Camera);
+    CreateCameraComponent: function(camera) {
+        return new CGE.Component(camera, CGE.ComponentType.Camera);
     },
 
-    createLightComponent: function(light) {
-        return new Component(light, CGE.ComponentType.Light);
+    CreateLightComponent: function(light) {
+        return new CGE.Component(light, CGE.ComponentType.Light);
     },
 });
 
@@ -1528,9 +1689,9 @@ CGE.Mesh = function(geometry, material) {
 //======================================= Entity =========================================
 
 CGE.Entity = function() {
-    CGE.Object.call(this);
+    CGE.VersionObject.call(this);
     Object.assign(this, {
-        components: new Map(),
+        _components: new Map(),
         transform: undefined,
         geometry: undefined,
         material: undefined,
@@ -1539,72 +1700,92 @@ CGE.Entity = function() {
     });
 };
 
-CGE.Entity.prototype = Object.assign(Object.create(CGE.Object.prototype), {
+CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
     constructor: CGE.Entity,
 
     update: function() {
-        this.components.forEach(function(value, key){
+        this._components.forEach(function(value, key){
             value.update();
         });
     },
 
     addComponent: function(component) {
         if (component instanceof CGE.Component) {
-            switch (component.type) {
-                case CGE.ComponentType.transform: 
+            if (component.getEntity() !== undefined) {
+                return undefined;
+            }
+            switch (component.getType()) {
+                case CGE.ComponentType.Transform: 
                     this.transform = component.getObject(); 
                     break;
-                case CGE.ComponentType.Geometry: 
+                case CGE.ComponentType.Geometry:
+                    this.needsUpdate();
                     this.geometry = component.getObject(); 
                     break;
                 case CGE.ComponentType.Material:
-                    this.material = Component.getObject();
+                    this.needsUpdate();
+                    this.material = component.getObject();
                     break;
                 case CGE.ComponentType.Camera:
-                    this.camera = Component.getObject();
+                    this.camera = component.getObject();
                     break;
                 case CGE.ComponentType.Light:
-                    this.light = Component.getObject();
+                    this.light = component.getObject();
                     break;
                 default:
                     break;
             }
-            this.components.set(component.type, component);
+            component.setEntity(this);
+            this._components.set(component.getType(), component);
         }
     },
 
     getComponent: function(componentType) {
-        return this.components.get(componentType);
+        return this._components.get(componentType);
     },
 
     getComponentObject: function(componentType) {
-        let component = this.components.get(componentType);
+        let component = this._components.get(componentType);
         return component !== undefined ? component.getObject() : undefined;
     },
 
-    removeComponet: function(component) {
+    removeComponent: function(component) {
         if (component instanceof CGE.Component) {
-            switch (component.type) {
-                case CGE.ComponentType.transform: 
-                    this.transform = undefined; 
-                    break;
-                case CGE.ComponentType.Geometry: 
-                    this.geometry = undefined; 
-                    break;
-                case CGE.ComponentType.Material:
-                    this.material = undefined;
-                    break;
-                case CGE.ComponentType.Camera:
-                    this.camera = undefined;
-                    break;
-                case CGE.ComponentType.Light:
-                    this.light = undefined;
-                    break;
-                default:
-                    break;
-            }
-            this.components.delete(component.type);
+            this.removeFromType(component.getType());
         }
+    },
+
+    removeFromType: function(type) {
+        switch (type) {
+            case CGE.ComponentType.transform: 
+                this.transform = undefined; 
+                break;
+            case CGE.ComponentType.Geometry: 
+                this.needsUpdate();
+                this.geometry = undefined; 
+                break;
+            case CGE.ComponentType.Material:
+                this.needsUpdate();
+                this.material = undefined;
+                break;
+            case CGE.ComponentType.Camera:
+                this.camera = undefined;
+                break;
+            case CGE.ComponentType.Light:
+                this.light = undefined;
+                break;
+            default:
+                break;
+        }
+        let component = this.getComponent(type);
+        if (component instanceof CGE.Component) {
+            component.setEntity(undefined);
+            this._components.delete(type);
+        }
+    },
+
+    needRender: function() {
+        return (this.geometry instanceof CGE.BufferGeometry) && (this.material instanceof CGE.Material);
     },
 });
 
@@ -1613,9 +1794,9 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.Object.prototype), {
 CGE.Scene = function() {
     CGE.Object.call(this);
     Object.assign(this, {
-        entities : [],
-        mainCamera: undefined,
-        enforceMaterial: undefined,
+        _entities: [],
+        _mainCamera: undefined,
+        _enforceMaterial: undefined,
     });
 };
 
@@ -1632,23 +1813,27 @@ CGE.Scene.prototype = Object.assign(Object.create(CGE.Object.prototype), {
 //======================================= WebGL2Renderer =========================================
 
 CGE.WebGL2Renderer = function() {
-    /// TODO: The Function name MUST use '_' inital that all called _gl function;
+    // TODO: The Function name MUST use '_' inital that all called _gl function;
+    // TODO: Take unless _gl's function out of constructor;
 
     let _canvas = document.createElement('canvas');
-    let _gl = _canvas.getContext('webgl2');
+    let _gl = _canvas.getContext('webgl2', {antialias: true});
 
     if (_gl === undefined) {
         alert('Can not use webgl 2.0');
         return undefined;
     }
 
+    let self = this;
     let isClearColor = true;
     let isClearDepth = true;
     let isClearStencil = false;
 
-    let initializedBufferMap = new Map();
-    let initialisedShaderMap = new Map();
-    let initialisedTextureMap = new Map();
+    let initializedMap = new Map();
+    // glBuffer --->  bufferGeometry
+    // glProgram  ---> material & shader
+    // glTexturexd  ----> texturexd
+    // glMesh -----> entity
 
     let vpMatrix = new CGE.Matrix4();
 
@@ -1678,292 +1863,511 @@ CGE.WebGL2Renderer = function() {
         );
     };
 
-    let vertexBufferData = function() {
+    let _glObject = function() {
+        CGE.Object.call(this);
         Object.assign(this, {
-
+            _localVersion: -1,
+            _generated: false,
         });
-    };
+    }
 
-    let GeometryDraw = function(mode, offset, count, type) {
+    _glObject.prototype = Object.assign(Object.create(CGE.Object.prototype), {
+        constructor: _glObject,
+
+        getLocalVersion: function() {
+            return this._localVersion;
+        },
+
+        setLocalVersion: function(version) {
+            this._localVersion = version;
+        },
+
+        setGenerated: function(b) {
+            this._generated = b;
+        },
+
+        isGenerated: function() {
+            return this._generated;
+        }
+    });
+
+    let _glBuffer = function(geometry) { 
+        _glObject.call(this);
         Object.assign(this, {
-            mode: mode,
-            offset: offset,
-            count: count,
-            type: type,
+            _vbos: [],
+            _ibo: undefined,
+            _draw: undefined,
+            _geometry: undefined,
         });
-    };
-    GeometryDraw.prototype.apply = function() {
-        _gl.drawArrays(this.mode, this.offset, this.count);
+        this.generateFromGeometry(geometry);
     };
 
-    let GeometryDrawWithIndex = function(mode, offset, count, type) {
-        GeometryDraw.call(this, mode, offset, count, type);
-    };
-    GeometryDrawWithIndex.prototype = Object.create(GeometryDraw.prototype);
+    _glBuffer.prototype = Object.assign(Object.create(_glObject.prototype), {
+        constructor: _glBuffer,
 
-    GeometryDrawWithIndex.prototype.apply = function() {
-        _gl.drawElements(this.mode, this.count, this.type, this.offset);
-    };
+        _createBufferFromData: function(target, data, usage) {
+            let buffer = _gl.createBuffer();
+            _gl.bindBuffer(target, buffer);
+            _gl.bufferData(target, data, usage);
+            _gl.bindBuffer(target, null);
+            return buffer;
+        },
 
-    let shaderProgram = function(shader, shaderData, mapLocations, uniformLocations) {
-        this.program = shader;
-        this.shaderData = shaderData;
-        this.mapLocations = mapLocations;
-        this.uniformLocations = uniformLocations;
-    };
+        generateFromGeometry: function(geometry) {
+            // TODO: make this function more simple;
+            let version = geometry.getUpdateVersion();
+            let attributeDatas = geometry.getAttributeDatas();
+            let indexData = geometry.getIndexData();
+            let drawParameter = geometry.getDrawParameter();
 
-    shaderProgram.prototype.useShaderProgram = function() {
-        _gl.useProgram(this.program);
-    };
+            if (attributeDatas.length === 0) {
+                this.setGenerated(false);
+                return undefined;
+            }
 
-    shaderProgram.prototype.getShaderProgram = function() {
-        return this.program;
-    };
+            this._geometry = geometry;
+            
+            attributeDatas.forEach(function(attribute){
+                let vbo = this._createBufferFromData(_gl.ARRAY_BUFFER, attribute.data, attribute.usage);
+                this._vbos.push(vbo);
+            }.bind(this));
 
-    shaderProgram.prototype.getMapLocation = function(mapType) {
-        return this.mapLocations.get(mapType);
-    };
+            if (geometry.indexData) {
+                this._ibo = _this._createBufferFromData(_gl.ELEMENT_ARRAY_BUFFER, indexData.data, indexData.usage);
+                this._draw = new _glDrawWithIndex(drawParameter.mode, drawParameter.offset, drawParameter.count, indexData.type);
+            } else {
+                this._draw = new _glDraw(drawParameter.mode, drawParameter.offset, drawParameter.count, 0);
+            }
+            
+            this.setLocalVersion(version);
+            this.setGenerated(true);
+        },
 
-    shaderProgram.prototype.getUniformLocation = function(uniformType) {
-        return this.uniformLocations.get(uniformType);
-    };
+        getGeometry: function() {
+            return this._geometry;
+        },
 
-    let texture2D = function(texture, minFilter, magFilter, wrapS, wrapT) {
+        getVbos: function() {
+            return this._vbos;
+        },
+
+        getIbo: function() {
+            return this._ibo;
+        },
+
+        getDraw: function() {
+            return this._draw;
+        },
+
+        draw: function() {
+            this._draw.apply();
+        },
+    });
+
+    let _glDraw = function(mode, offset, count, type) {
         Object.assign(this, {
-            texture: texture,
-            minFilter: minFilter,
-            magFilter: magFilter,
-            wrapS: wrapS,
-            wrapT: wrapT,
+            _mode: mode,
+            _offset: offset,
+            _count: count,
+            _type: type,
         });
     };
 
-    texture2D.prototype.apply = function(index) {
-        _gl.activeTexture(_gl.TEXTURE0 + index);
-        _gl.bindTexture(_gl.TEXTURE_2D, this.texture);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this.minFilter);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this.magFilter);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this.wrapS);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this.wrapT);
+    _glDraw.prototype = Object.assign(_glDraw.prototype, {
+        constructor: _glDraw,
+        apply: function() {
+            _gl.drawArrays(this._mode, this._offset, this._count);
+        },
+    }); 
+
+    let _glDrawWithIndex = function(mode, offset, count, type) {
+        _glDraw.call(this, mode, offset, count, type);
+    };
+    _glDrawWithIndex.prototype = Object.assign(Object.create(_glDrawWithIndex.prototype), {
+        constructor: _glDrawWithIndex,
+        apply: function() {
+            _gl.drawElements(this._mode, this._count, this._type, this._offset);
+        },
+    });
+
+    let _glTexture = function() {
+        _glObject.call(this);
+        Object.assign(this, {
+            _minFilter: _gl.LINEAR,
+            _magFilter: _gl.LINEAR,
+            _texture: undefined,
+        });
     };
 
-    this.loadVertexData = function(vertexData) {
-        let data = initializedBufferMap.get(vertexData.id);
-        if (data !== undefined && data.localVersion === vertexData.getUpdateVersion()) 
-            return data.buffer;
-        if (vertexData.attributeDatas.length === 0) 
-            return undefined;
+    _glTexture.prototype = Object.assign(Object.create(_glObject.prototype), {
+        constructor: _glTexture,
 
-        let vbos = [];
-        let ibo = undefined;
-        let draw = undefined;
+        setFilter: function(min, mag) {
+            this._minFilter = min;
+            this._magFilter = mag;
+        },
+    });
 
-        let drawParameter = vertexData.drawParameter;
-        vertexData.attributeDatas.forEach(function(attribute){
-            let vbo = _gl.createBuffer();
-            _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
-            _gl.bufferData(_gl.ARRAY_BUFFER, attribute.data, attribute.usage);
-            _gl.bindBuffer(_gl.ARRAY_BUFFER, null);
-            vbos.push(vbo);
+    let _glTexture2D = function(texture2D) {
+        _glTexture.call(this);
+        Object.assign(this, {
+            _wrapS: _gl.CLAMP_TO_EDGE,
+            _wrapT: _gl.CLAMP_TO_EDGE,
         });
-        if (vertexData.indexData) {
-            ibo = _gl.createBuffer();
-            _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, ibo);
-            _gl.bufferData(_gl.ELEMENT_ARRAY_BUFFER, vertexData.indexData.data, vertexData.indexData.usage);
-            _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, null);
-            draw = new GeometryDrawWithIndex(drawParameter.mode, drawParameter.offset, drawParameter.count, vertexData.indexData.type);
-        } else {
-            draw = new GeometryDraw(drawParameter.mode, drawParameter.offset, drawParameter.count, 0);
+        this.generateFromTexture2D(texture2D);
+    };
+
+    _glTexture2D.prototype = Object.assign(Object.create(_glTexture.prototype), {
+        constructor: _glTexture2D,
+
+        _createBufferFromImage: function(level, internalformat, format, type, image) {
+            let texture = _gl.createTexture();
+            _gl.bindTexture(_gl.TEXTURE_2D, texture);
+            _gl.texImage2D(_gl.TEXTURE_2D, level, internalformat, format, type, image);
+            return texture;
+        },
+
+        _createBufferFromData: function(level, internalformat, width, height, border, format, type, data) {
+            let texture = _gl.createTexture();
+            _gl.bindTexture(_gl.TEXTURE_2D, texture);
+            _gl.texImage2D(_gl.TEXTURE_2D, level, internalformat, width, height, border, format, type, data);
+            return texture;
+        },
+
+        generateFromTexture2D: function(texture2D) {
+            // TODO: make this function more simple;
+            let version = texture2D.getUpdateVersion();
+            let format = texture2D.getFormat();
+            let internalformat = texture2D.getInternalformat();
+            let type = texture2D.getType();
+
+            let texture = undefined;
+            if (texture2D.getImage() !== undefined && texture2D.isLoad()) {
+                texture = this._createBufferFromImage(0, internalformat, format, type, texture2D.getImage());
+            } else if (texture2D.getWidth() !== 0 && texture2D.getHeight() !== 0) {
+                texture = _createBufferFromData(0, internalformat, texture2D.getWidth(), texture2D.getHeight(), 0, format, type, null);
+            } else {
+                this.setGenerated(false);
+                return undefined;
+            }
+            this._texture = texture;
+
+            this.setLocalVersion(texture2D.getUpdateVersion());
+            this.setFilter(texture2D.getMinFilter(), texture2D.getMagFilter());
+            this.setWarp(texture2D.getWrapS(), texture2D.getWrapT());
+
+            this.setLocalVersion(version);
+            this.setGenerated(true);
+        },
+
+        apply: function(index) {
+            _gl.activeTexture(_gl.TEXTURE0 + index);
+            _gl.bindTexture(_gl.TEXTURE_2D, this._texture);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this._minFilter);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this._magFilter);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this._wrapS);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this._wrapT);
+        },
+
+        setWarp: function(wrapS, wrapT) {
+            this._wrapS = wrapS;
+            this._wrapT = wrapT;
+        }
+    });
+
+    let _glProgram = function(shader) {
+        _glObject.call(this);
+        Object.assign(this, {
+            _program: undefined,
+            _mapLocations: new Map(),
+            _uniformLocations: new Map(),
+        });
+        this.generateFromShader(shader);
+    };
+
+    _glProgram.prototype = Object.assign(Object.create(_glObject.prototype), {
+        constructor: _glProgram,
+
+        _createShaderFromeText: function(type, text) {
+            let shader = _gl.createShader(type);
+            _gl.shaderSource(shader, text);
+            _gl.compileShader(shader);
+            if (_gl.getShaderParameter(shader, _gl.COMPILE_STATUS) == 0) {
+                console.error(shaderData.vertexShaderText);
+                console.error(_gl.getShaderInfoLog(shader));
+                _gl.deleteShader(shader);
+                return undefined;
+            }
+            return shader;
+        },
+
+        _createProgram: function(vs, fs) {
+            let program = _gl.createProgram();
+            _gl.attachShader(program, vs);
+            _gl.attachShader(program, fs);
+
+            _gl.linkProgram(program);
+
+            if (!_gl.getProgramParameter(program, _gl.LINK_STATUS)) {
+                console.error("Could not initialise shaders shader " + _gl.getProgramInfoLog(shader));
+                return undefined;
+            }
+            return program;
+        },
+
+        _createProgramFromText: function(vsText, fsText) {
+            let vs = this._createShaderFromeText(_gl.VERTEX_SHADER, vsText);              
+            let fs = this._createShaderFromeText(_gl.FRAGMENT_SHADER, fsText); 
+
+            if (vs === undefined || fs === undefined) {
+                return undefined;
+            }
+
+            let program = this._createProgram(vs, fs);
+
+            _gl.deleteShader(vs);
+            _gl.deleteShader(fs);
+
+            return program;
+        },
+
+        _createUniformLocationMap(srcMap, dstMap) {
+            srcMap.forEach(function(value, key) {
+                let location = _gl.getUniformLocation(this._program, value);
+                dstMap.set(key, location);
+            }.bind(this));
+        },
+
+        generateFromShader: function(shader) {
+            let version = shader.getUpdateVersion();
+            let program = this._createProgramFromText(shader.getVertexShaderText(), shader.getFragmentShaderText());
+
+            if (program === undefined) {
+                this.setGenerated(false);
+                return undefined;
+            }
+
+            this._program = program;
+            this._createUniformLocationMap(shader.getTextureNameMap(), this._mapLocations);
+            this._createUniformLocationMap(shader.getUniformNameMap(), this._uniformLocations);
+            
+            this.setLocalVersion(version);
+            this.setGenerated(true);
+        },
+
+        apply: function() {
+            _gl.useProgram(this._program);
+        },
+
+        getMapLocation: function(mapType) {
+            return this._mapLocations.get(mapType);
+        },
+
+        getUniformLocation: function(uniformType) {
+            return this._uniformLocations.get(uniformType);
+        },
+    });
+
+    this.initGeometry = function(geometry) {
+        let glBuffer = initializedMap.get(geometry.id);
+        if (glBuffer !== undefined && glBuffer.getLocalVersion() === geometry.getUpdateVersion()) 
+            return glBuffer;
+
+        glBuffer = new _glBuffer(geometry);
+
+        if (glBuffer.isGenerated()) {
+            initializedMap.set(geometry.id, glBuffer);
+            return glBuffer;
+        }
+    };
+
+    this.initShader = function(shader) {
+        let glProgram = initializedMap.get(shader.id);
+        if (glProgram !== undefined && glProgram.getLocalVersion() === shader.getUpdateVersion()) 
+            return glProgram;
+
+        glProgram = new _glProgram(shader);
+        if (glProgram.isGenerated()) {
+            initializedMap.set(shader.id, glProgram);
         }
 
-        let bufferData = {
-            vbos: vbos,
-            ibo: ibo,
-            vao: undefined,
-            draw: draw,
-            vertexData: vertexData,
-        };
-        initializedBufferMap.set(vertexData.id, {buffer:bufferData, localVersion:vertexData.getUpdateVersion()});
-        return bufferData;
+        return glProgram;
+    };  
+
+    this.initTexture2d = function(texture2d) {
+        let glTexture2d = initializedMap.get(texture2d.id);
+        if (glTexture2d !== undefined && glTexture2d.getLocalVersion() === texture2d.getUpdateVersion()) 
+            return glTexture2d;
+
+        glTexture2d = new _glTexture2D(texture2d);
+        if (glTexture2d.isGenerated()) {
+            initializedMap.set(texture2d.id, glTexture2d);
+            return glTexture2d;
+        }
     };
 
-    this.bufferGeometryDraw = function(bufferData, material) {
-        if (bufferData.vao === undefined) {
+
+    // _glMesh's local version is Entity version;
+    // TODO: try remove Entity's update version;
+    let _glMesh = function(entity) {
+        _glObject.call(this);
+        Object.assign(this, {
+            _vao: undefined,
+            _textures: new Map(),
+            _uniforms: undefined,
+            _glBuffer: undefined,
+            _glProgram: undefined,
+        });
+        this.generate(entity);
+    };
+
+    _glMesh.prototype = Object.assign(Object.create(_glObject.prototype), {
+        constructor: _glMesh,
+
+        _initGLObject: function(geometry, shader, images) {
+            let glBuffer = self.initGeometry(geometry);
+            if (!glBuffer) {
+                return undefined;
+            }
+            let glProgram = self.initShader(shader);
+            if (!glProgram) {
+                return undefined;
+            }
+
+            let load_ok = true;
+
+            for (let i = 0; i < images.length; i++) {
+                let image = images[i];
+                let glTexture = self.initTexture2d(image.map);
+                if (glTexture !== undefined) {
+                    this._textures.set(image.type, glTexture);
+                } else {
+                    return undefined;
+                }
+            }
+
+            this._glBuffer = glBuffer;
+            this._glProgram = glProgram;
+
+            return this;
+        },
+
+        _createVao: function(glBuffer, shader) {
             let vao = _gl.createVertexArray();
             _gl.bindVertexArray(vao);
-            let shader = material.shader;
-            for (let i = 0; i < bufferData.vbos.length; i++) {
-                let attribute = bufferData.vertexData.attributeDatas[i];
-                let vbo = bufferData.vbos[i];
+            let geometry = glBuffer.getGeometry();
+            let vbos = glBuffer.getVbos();
+            let ibo = glBuffer.getIbo();
+            let attributeDatas = geometry.getAttributeDatas();
+            for (let i = 0; i < vbos.length; i++) {
+                let attribute = attributeDatas[i];
+                let vbo = vbos[i];
                 _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
                 attribute.attribPointers.forEach(function(param){
-                    let location = shader.shaderData.getAttribLocation(param.attribute);
+                    let location = shader.getAttribLocation(param.attribute);
                     if (location === undefined) 
                         return; 
                     _gl.enableVertexAttribArray(location);
                     _gl.vertexAttribPointer(location, param.num, attribute.type, false, attribute.stride, param.offset);
                 });
             }
-            if (bufferData.ibo) {
-                _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, bufferData.ibo);
+            if (ibo) {
+                _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, ibo);
             }
             _gl.bindVertexArray(null);
-            bufferData.vao = vao;
-        }
+            this._vao = vao;
+            return this;
+        },
 
-        /// TODO: remove _gl
-        _gl.bindVertexArray(bufferData.vao);
-        bufferData.draw.apply();
-    };
+        _applyVao: function() {
+            _gl.bindVertexArray(this._vao);
+        },
 
-    this.loadShaderData = function(shaderData) {
-        let data = initialisedShaderMap.get(shaderData.id);
-        if (data !== undefined && data.localVersion === shaderData.getUpdateVersion()) 
-            return data.program;
+        _applyMaterial: function() {
+            this._glProgram.apply();
+            let count = 0;
+            this._textures.forEach(function(glTexture, type) {
+                let location = this._glProgram.getMapLocation(type);
+                glTexture.apply(count);
+                _gl.uniform1i(location, count);
+                count++;
+            }.bind(this));
 
-        let vs = _gl.createShader(_gl.VERTEX_SHADER);
-        _gl.shaderSource(vs, shaderData.vertexShaderText);
-        _gl.compileShader(vs);
-        if (_gl.getShaderParameter(vs, _gl.COMPILE_STATUS) == 0) {
-            console.error(shaderData.vertexShaderText);
-            console.error(_gl.getShaderInfoLog(vs));
-            _gl.deleteShader(vs);
-            return undefined;
-        }
-          
-        let fs = _gl.createShader(_gl.FRAGMENT_SHADER);
-        _gl.shaderSource(fs, shaderData.fragmentShaderText);
-        _gl.compileShader(fs);
-        if (_gl.getShaderParameter(fs, _gl.COMPILE_STATUS) == 0) {
-            console.error(shaderData.fragmentShaderText);
-            console.error(_gl.getShaderInfoLog(fs));
-            _gl.deleteShader(vs);
-            _gl.deleteShader(fs);
-            return undefined;
-        }
+            // TODO: support all uniform;
 
-        let program = _gl.createProgram();
-        _gl.attachShader(program, vs);
-        _gl.attachShader(program, fs);
-
-        _gl.linkProgram(program);
-
-        if (!_gl.getProgramParameter(program, _gl.LINK_STATUS)) {
-            console.error("Could not initialise shaders shader " + _gl.getProgramInfoLog(shader));
-        }
-
-        _gl.deleteShader(vs);
-        _gl.deleteShader(fs);
-
-        let mapLocations = new Map();
-        shaderData.requireTextureNames.forEach(function(value, key) {
-            let location = _gl.getUniformLocation(program, value);
-            mapLocations.set(key, location);
-        });
-
-        let uniformLocations = new Map();
-        shaderData.requireUniformNames.forEach(function(value, key) {
-            let location = _gl.getUniformLocation(program, value);
-            uniformLocations.set(key, location);
-        });
-
-        let sProgram = new shaderProgram(program, shaderData, mapLocations, uniformLocations);
+            this._glProgram._uniformLocations.forEach(function(value, key) {
+                _gl.uniformMatrix4fv(value, false, vpMatrix.data);
+            });
 
 
-        // TODO: add new function to do this;
-        initialisedShaderMap.set(shaderData.id, {
-            program: sProgram, 
-            localVersion: shaderData.getUpdateVersion(),
-        });
-        return sProgram;
-    };  
+            //TODO: apply state;
+        },
 
-    this.loadTexture2DData = function(textureData) {
-        let data = initialisedTextureMap.get(textureData.id);
-        if (data !== undefined && data.localVersion === textureData.getUpdateVersion()) 
-            return data.texture;
-        let format = textureData.format;
-        let internalformat = textureData.internalformat;
-        let type = textureData.type;
-        let texture = undefined;
-        if (textureData.img !== undefined && textureData.isLoad) {
-            texture = _gl.createTexture();
-            _gl.bindTexture(_gl.TEXTURE_2D, texture);
-            _gl.texImage2D(_gl.TEXTURE_2D, 0, internalformat, format, type, textureData.img);
-        } else if (textureData.width !== 0 && textureData.height !== 0) {
-            texture = _gl.createTexture();
-            _gl.bindTexture(_gl.TEXTURE_2D, texture);
-            _gl.texImage2D(gl.TEXTURE_2D, 0, internalformat, textureData.width, textureData.height, 0, format, type, null);
-        } else {
-            return undefined;
-        }
+        generate: function(entity) {
+            let geometry = entity.geometry;
+            let material = entity.material;
+            let shader = material.getShader();
+            let images = material.getMapRequests();
 
-        let textureObj = new texture2D(texture, textureData.minFilter, textureData.magFilter, textureData.wrapS, textureData.wrapT);
-
-        let textureInnerData = {
-            texture: textureObj,
-            localVersion: textureData.getUpdateVersion(),
-        };
-
-        initialisedTextureMap.set(textureData.id, textureInnerData);
-        return textureObj;
-    };
-
-    this.applyMaterial = function(materialData) {
-        let shader = this.loadShaderData(materialData.shaderData);
-        if (!shader) {
-            return undefined;
-        }
-        shader.useShaderProgram();
-        let requestsMapTypes = materialData.getMapRequests();
-        for (let i = 0; i < requestsMapTypes.length; i++) {
-            let texture = this.loadTexture2DData(requestsMapTypes[i].map);
-            if (!texture) 
+            if (this._initGLObject(geometry, shader, images) === undefined) {
+                this.setGenerated(false);
                 return undefined;
-            let mapType = requestsMapTypes[i].mapType;
-            let location = shader.getMapLocation(mapType);
-            texture.apply(i);
-            _gl.uniform1i(location, i);
+            }
+
+            let vao = this._createVao(this._glBuffer, shader);
+            if (vao === undefined) {
+                this.setGenerated(false);
+                return undefined;
+            }
+
+            let version = entity.getUpdateVersion();
+            this.setLocalVersion(version);
+            this.setGenerated(true);
+        },
+
+        apply: function() {
+            this._applyMaterial();
+            this._applyVao();
+        },
+
+        draw: function() {
+            this._glBuffer.draw();
+        },
+    });
+
+    this.applyEntity = function(entity) {
+        let glMesh = initializedMap.get(entity.id);
+        if (glMesh !== undefined && glMesh.getLocalVersion() === entity.getUpdateVersion()) {
+            glMesh.generate(entity);
+        } else {
+            glMesh = new _glMesh(entity);
+            if (!glMesh.isGenerated()) {
+                return undefined;
+            }
+            initializedMap.set(entity.id, glMesh);
         }
-
-        shader.uniformLocations.forEach(function(value, key) {
-            _gl.uniformMatrix4fv(value, false, vpMatrix.data);
-        });
-
-        return {
-            shader: shader,
-        };
+        glMesh.apply();
+        glMesh.draw();
     };
 
-    this.renderSingle = function(vertexData, materialData) {
+    this.renderSingle = function(entity, camera) {
         this.clear(isClearColor, isClearDepth, isClearStencil);
-        let material = this.applyMaterial(materialData);
-        if (!material) {
-            return;
-        }
-        let buffer = this.loadVertexData(vertexData);
-        if (!buffer) {
-            return;
-        }
-        this.bufferGeometryDraw(buffer, material);
+        vpMatrix.copy(camera.getViewProjectionMatrix()).applyMatrix4(entity.transform.getMatrix());
+        this.applyEntity(entity);
     };
 
     this.renderMesh = function(mesh, camera) {
         this.clear(isClearColor, isClearDepth, isClearStencil);
         vpMatrix.copy(camera.getViewProjectionMatrix()).applyMatrix4(mesh.transform.getMatrix());
-        let material = this.applyMaterial(mesh.material);
-        if (!material) {
+        let glProgram = this.applyMaterial(mesh.material);
+        if (!glProgram) {
             return;
         }
-        let buffer = this.loadVertexData(mesh.geometry);
-        if (!buffer) {
+        let glBuffer = this.initGeometry(mesh.geometry);
+        if (!glBuffer) {
             return;
         }
-        this.bufferGeometryDraw(buffer, material);
-    };
-
-    this.renderEntity = function(entity, vpMatrix) {
-
+        this.bufferGeometryDraw(glBuffer, mesh.material.getShader());
     };
 
     this.render = function(scene) {

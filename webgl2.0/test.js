@@ -1,3 +1,5 @@
+'use strict';
+
 // import CGE from './main.js'
 
 let vertexShaderText = "#version 300 es\n\
@@ -46,7 +48,7 @@ renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
 
 let camera = new CGE.Camera(window.innerWidth, window.innerHeight);
-camera.setPosition(new CGE.Vector3(-4, 0, 4));
+camera.setPosition(new CGE.Vector3(3, 2, 4));
 camera.lookAt(new CGE.Vector3(0,0,0));
 camera.update();
 
@@ -103,7 +105,7 @@ let attribs = [
 
 vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_ELEMENT * 7, vertexPositionData);
 vertexbuffer.setIndexData(indexData);
-vertexbuffer.setDrawParameter(CGE.TRIANGLES, 3, 0);
+vertexbuffer.setDrawParameter(3);
 
 
 let shader = new CGE.Shader();
@@ -116,17 +118,26 @@ shader.addUniformName(CGE.UniformType.MVPMatrix, 'mvpMatrix');
 
 let texture = new CGE.Texture2d();
 texture.setImageSrc('qiang.jpg');
+texture.setFilter(CGE.NEAREST, CGE.NEAREST);
 
 let material = new CGE.BaseMaterial();
-material.setShader(shader);
 material.setDiffuseMap(texture);
 
 let mesh = new CGE.Mesh(vertexbuffer, material);
 mesh.transform.setPosition(new CGE.Vector3(1,0,0));
 
+let entity = new CGE.Entity();
+entity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
+entity.addComponent(CGE.Component.CreateMaterialComponent(material));
+entity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
+
+let rad = 0;
+
 let render = function() {
-    // renderer.renderSingle(vertexbuffer, material);
-    renderer.renderMesh(mesh, camera);
+    rad += 0.01 * Math.PI;
+    camera.setPosition(new CGE.Vector3(1*Math.sin(rad), 1*Math.cos(rad), 1));
+    camera.update();
+    renderer.renderSingle(entity, camera);
 };
 
 let test_mat4 = new CGE.Matrix4();
