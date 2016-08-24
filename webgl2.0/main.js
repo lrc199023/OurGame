@@ -1,35 +1,37 @@
 'use strict';
 const CGE = { VERSION:'01' };
-CGE.AttribTypeCount = 0;
-CGE.MapTypeCount = 0;
-CGE.UniformTypeCount = 0;
-CGE.ComponentTypeCount = 0;
 CGE.GLMAT_EPSILON = 0.000001;
+CGE.getTypeCount = function() {
+    let TypeCount = 0;
+    return function getTypeCount() {
+        return TypeCount++;
+    };
+}();
 Object.assign( CGE, {
     AttribType : {
-        POSITION            : CGE.AttribTypeCount++,
-        NORMAL              : CGE.AttribTypeCount++,
-        TANGENT             : CGE.AttribTypeCount++,
-        BINORMAL            : CGE.AttribTypeCount++,
-        COLOR               : CGE.AttribTypeCount++,
-        TEXCOORD0           : CGE.AttribTypeCount++,
-        TEXCOORD1           : CGE.AttribTypeCount++,
-        TEXCOORD2           : CGE.AttribTypeCount++,
-        TEXCOORD3           : CGE.AttribTypeCount++,
-        TEXCOORD4           : CGE.AttribTypeCount++,
+        POSITION            : CGE.getTypeCount(),
+        NORMAL              : CGE.getTypeCount(),
+        TANGENT             : CGE.getTypeCount(),
+        BINORMAL            : CGE.getTypeCount(),
+        COLOR               : CGE.getTypeCount(),
+        TEXCOORD0           : CGE.getTypeCount(),
+        TEXCOORD1           : CGE.getTypeCount(),
+        TEXCOORD2           : CGE.getTypeCount(),
+        TEXCOORD3           : CGE.getTypeCount(),
+        TEXCOORD4           : CGE.getTypeCount(),
     },
 
     MapType : {
-        DIFFUSE             : CGE.MapTypeCount++,
-        NORMAL              : CGE.MapTypeCount++,
-        SPECULAR            : CGE.MapTypeCount++,
-        BUMP                : CGE.MapTypeCount++,
-        DEPTH               : CGE.MapTypeCount++,
-        OTHER0              : CGE.MapTypeCount++,
-        OTHER1              : CGE.MapTypeCount++,
-        OTHER2              : CGE.MapTypeCount++,
-        OTHER3              : CGE.MapTypeCount++,
-        OTHER4              : CGE.MapTypeCount++,
+        DIFFUSE             : CGE.getTypeCount(),
+        NORMAL              : CGE.getTypeCount(),
+        SPECULAR            : CGE.getTypeCount(),
+        BUMP                : CGE.getTypeCount(),
+        DEPTH               : CGE.getTypeCount(),
+        OTHER0              : CGE.getTypeCount(),
+        OTHER1              : CGE.getTypeCount(),
+        OTHER2              : CGE.getTypeCount(),
+        OTHER3              : CGE.getTypeCount(),
+        OTHER4              : CGE.getTypeCount(),
     },
 
     UniformType: {
@@ -37,27 +39,28 @@ Object.assign( CGE, {
         //M : model, 
         //V : view, 
         //P : projection
-        WMatrix                     : CGE.UniformTypeCount++,
-        MVMatrix                    : CGE.UniformTypeCount++,
-        MVPMatrix                   : CGE.UniformTypeCount++,
-        NormalWMatrix               : CGE.UniformTypeCount++,
-        NormalMVMatrix              : CGE.UniformTypeCount++,
-        NormalMVPMatrix             : CGE.UniformTypeCount++,
-        LightPosition01             : CGE.UniformTypeCount++,
-        LightPosition02             : CGE.UniformTypeCount++,
-        LightPosition03             : CGE.UniformTypeCount++,
-        LightPosition04             : CGE.UniformTypeCount++,
-        OTHER0                      : CGE.UniformTypeCount++,
-        OTHER1                      : CGE.UniformTypeCount++,
-        OTHER2                      : CGE.UniformTypeCount++,
+        WMatrix                     : CGE.getTypeCount(),
+        MVMatrix                    : CGE.getTypeCount(),
+        MVPMatrix                   : CGE.getTypeCount(),
+        NormalWMatrix               : CGE.getTypeCount(),
+        NormalMVMatrix              : CGE.getTypeCount(),
+        NormalMVPMatrix             : CGE.getTypeCount(),
+        LightPosition               : CGE.getTypeCount(),
+        LightPosition01             : CGE.getTypeCount(),
+        LightPosition02             : CGE.getTypeCount(),
+        LightPosition03             : CGE.getTypeCount(),
+        LightPosition04             : CGE.getTypeCount(),
+        OTHER0                      : CGE.getTypeCount(),
+        OTHER1                      : CGE.getTypeCount(),
+        OTHER2                      : CGE.getTypeCount(),
     },
 
     ComponentType: {
-        Transform                   : CGE.ComponentTypeCount++,
-        Geometry                    : CGE.ComponentTypeCount++,
-        Material                    : CGE.ComponentTypeCount++,
-        Camera                      : CGE.ComponentTypeCount++,
-        Light                       : CGE.ComponentTypeCount++,
+        Transform                   : CGE.getTypeCount(),
+        Geometry                    : CGE.getTypeCount(),
+        Material                    : CGE.getTypeCount(),
+        Camera                      : CGE.getTypeCount(),
+        Light                       : CGE.getTypeCount(),
     },
 
     ZERO                           : 0,
@@ -1101,7 +1104,6 @@ CGE.Shader = function() {
         _fragmentShaderText: '',
         _requireAttributeLocations: new Map(),
         _requireUniformNames: new Map(),
-        _requireTextureNames: new Map(),
         _requireRenderLocarions: new Map(),
     });
 };
@@ -1140,13 +1142,20 @@ CGE.Shader.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
         return this._requireAttributeLocations;
     },
 
-    addUniformName: function(uniformType, name) {
-        this._requireUniformNames.set(uniformType, name);
+    _createUniformObject: function(name, type) {
+        return {
+            name: name,
+            type: type || CGE.FLOAT_MAT4,
+        };
+    },
+
+    addUniformName: function(uniformType, name, dataType) {
+        this._requireUniformNames.set(uniformType, this._createUniformObject(name, dataType));
     },
 
     addUniformNames: function(array) {
         array.forEach(function(object){
-            this._requireUniformNames.set(object.type, object.name);
+            this.addUniformName(object.type, object.name, object.type);
         });
     },
 
@@ -1159,21 +1168,17 @@ CGE.Shader.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
     },
 
     addTextureName: function(mapType, name) {
-        this._requireTextureNames.set(mapType, name);
+        this.addUniformName(mapType, name, CGE.UNSIGNED_INT);
     },
 
     addTextureNames: function(array) {
         array.forEach(function(object){
-            this._requireTextureNames.set(object.type, object.name);
+            this.addTextureName(object.type, object.name);
         });
     },
 
     getTextureName: function(mapType) {
-        return this._requireTextureNames.get(mapType);
-    },
-
-    getTextureNameMap: function() {
-        return this._requireTextureNames;
+        return this.getUniformName(mapType);
     },
 
     addRenderLocation: function(renderType, location) {
@@ -1576,6 +1581,10 @@ CGE.Camera.prototype = Object.assign(Object.create(CGE.Transform.prototype), {
         this.projection.perspective(this.fovy, this.aspect, this.near, this.far);
     },
 
+    getProjectionMatrix: function() {
+        return this.projection;
+    },
+
     getViewProjectionMatrix: function() {
         let mat4 = this.projection.clone();
         mat4.applyMatrix4(this.getMatrix());
@@ -1719,11 +1728,9 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
                     this.transform = component.getObject(); 
                     break;
                 case CGE.ComponentType.Geometry:
-                    this.needsUpdate();
                     this.geometry = component.getObject(); 
                     break;
                 case CGE.ComponentType.Material:
-                    this.needsUpdate();
                     this.material = component.getObject();
                     break;
                 case CGE.ComponentType.Camera:
@@ -1737,6 +1744,7 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
             }
             component.setEntity(this);
             this._components.set(component.getType(), component);
+            this.needsUpdate();
         }
     },
 
@@ -1756,31 +1764,30 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
     },
 
     removeFromType: function(type) {
-        switch (type) {
-            case CGE.ComponentType.transform: 
-                this.transform = undefined; 
-                break;
-            case CGE.ComponentType.Geometry: 
-                this.needsUpdate();
-                this.geometry = undefined; 
-                break;
-            case CGE.ComponentType.Material:
-                this.needsUpdate();
-                this.material = undefined;
-                break;
-            case CGE.ComponentType.Camera:
-                this.camera = undefined;
-                break;
-            case CGE.ComponentType.Light:
-                this.light = undefined;
-                break;
-            default:
-                break;
-        }
         let component = this.getComponent(type);
         if (component instanceof CGE.Component) {
+            switch (type) {
+                case CGE.ComponentType.transform: 
+                    this.transform = undefined; 
+                    break;
+                case CGE.ComponentType.Geometry: 
+                    this.geometry = undefined; 
+                    break;
+                case CGE.ComponentType.Material:
+                    this.material = undefined;
+                    break;
+                case CGE.ComponentType.Camera:
+                    this.camera = undefined;
+                    break;
+                case CGE.ComponentType.Light:
+                    this.light = undefined;
+                    break;
+                default:
+                    break;
+            }
             component.setEntity(undefined);
             this._components.delete(type);
+            this.needsUpdate();
         }
     },
 
@@ -1819,6 +1826,8 @@ CGE.WebGL2Renderer = function() {
     let _canvas = document.createElement('canvas');
     let _gl = _canvas.getContext('webgl2', {antialias: true});
 
+    // TODO: Add a class to control gl context;
+
     if (_gl === undefined) {
         alert('Can not use webgl 2.0');
         return undefined;
@@ -1835,7 +1844,13 @@ CGE.WebGL2Renderer = function() {
     // glTexturexd  ----> texturexd
     // glMesh -----> entity
 
-    let vpMatrix = new CGE.Matrix4();
+    let renderCount = 0;
+
+    let cameraMatrices = {
+        viewMatirx: new CGE.Matrix4(),
+        projectionMatirx: new CGE.Matrix4(),
+        viewProjectionMatirx: new CGE.Matrix4(),
+    }
 
     this.setSize = function(width, height) {
         _canvas.width = width;
@@ -1867,6 +1882,7 @@ CGE.WebGL2Renderer = function() {
         CGE.Object.call(this);
         Object.assign(this, {
             _localVersion: -1,
+            _renderCount: renderCount,
             _generated: false,
         });
     }
@@ -1888,7 +1904,15 @@ CGE.WebGL2Renderer = function() {
 
         isGenerated: function() {
             return this._generated;
-        }
+        },
+
+        checkRenderCount: function() {
+            return renderCount - this._renderCount; 
+        },
+
+        updateRenderCount: function() {
+            this._renderCount = renderCount;
+        },
     });
 
     let _glBuffer = function(geometry) { 
@@ -2079,7 +2103,6 @@ CGE.WebGL2Renderer = function() {
         _glObject.call(this);
         Object.assign(this, {
             _program: undefined,
-            _mapLocations: new Map(),
             _uniformLocations: new Map(),
         });
         this.generateFromShader(shader);
@@ -2124,6 +2147,9 @@ CGE.WebGL2Renderer = function() {
             }
 
             let program = this._createProgram(vs, fs);
+            if (program === undefined) {
+                return undefined;
+            }
 
             _gl.deleteShader(vs);
             _gl.deleteShader(fs);
@@ -2131,10 +2157,17 @@ CGE.WebGL2Renderer = function() {
             return program;
         },
 
+        _createGLUniformObject(location, type) {
+            return {
+                location: location,
+                type: type
+            };
+        },
+
         _createUniformLocationMap(srcMap, dstMap) {
             srcMap.forEach(function(value, key) {
-                let location = _gl.getUniformLocation(this._program, value);
-                dstMap.set(key, location);
+                let location = _gl.getUniformLocation(this._program, value.name);
+                dstMap.set(key, this._createGLUniformObject(location, value.type));
             }.bind(this));
         },
 
@@ -2148,7 +2181,6 @@ CGE.WebGL2Renderer = function() {
             }
 
             this._program = program;
-            this._createUniformLocationMap(shader.getTextureNameMap(), this._mapLocations);
             this._createUniformLocationMap(shader.getUniformNameMap(), this._uniformLocations);
             
             this.setLocalVersion(version);
@@ -2159,8 +2191,37 @@ CGE.WebGL2Renderer = function() {
             _gl.useProgram(this._program);
         },
 
-        getMapLocation: function(mapType) {
-            return this._mapLocations.get(mapType);
+        applyUniformValue: function(uniformType, data) {
+            let uniform = this.getUniformLocation(uniformType);
+            if (uniform === undefined) {
+                return;
+            }
+            // uniform.type; 
+            // uniform.location
+            // TODO: 完成这个类，
+            let location = uniform.location;
+            switch(uniform.type) {
+                case CGE.UNSIGNED_INT:
+                    _gl.uniform1i(location, data);
+                    break;
+                case CGE.FLOAT_VEC2:
+                    _gl.uniform2fv(location, data);
+                    break;
+                case CGE.FLOAT_VEC3:
+                    _gl.uniform3fv(location, data);
+                    break;
+                case CGE.FLOAT_VEC4:
+                    _gl.uniform3fv(location, data);
+                    break;
+                case CGE.FLOAT_MAT3:
+                    _gl.uniformMatrix3fv(location, false, data);
+                    break;
+                case CGE.FLOAT_MAT4:
+                    _gl.uniformMatrix4fv(location, false, data);
+                    break;
+                default:
+                    break;
+            }
         },
 
         getUniformLocation: function(uniformType) {
@@ -2217,6 +2278,7 @@ CGE.WebGL2Renderer = function() {
             _uniforms: undefined,
             _glBuffer: undefined,
             _glProgram: undefined,
+            _entity: undefined,
         });
         this.generate(entity);
     };
@@ -2234,14 +2296,13 @@ CGE.WebGL2Renderer = function() {
                 return undefined;
             }
 
-            let load_ok = true;
-
             for (let i = 0; i < images.length; i++) {
                 let image = images[i];
                 let glTexture = self.initTexture2d(image.map);
                 if (glTexture !== undefined) {
                     this._textures.set(image.type, glTexture);
                 } else {
+                    this._textures.clear();
                     return undefined;
                 }
             }
@@ -2252,7 +2313,8 @@ CGE.WebGL2Renderer = function() {
             return this;
         },
 
-        _createVao: function(glBuffer, shader) {
+        _createVao: function(shader) {
+            let glBuffer = this._glBuffer;
             let vao = _gl.createVertexArray();
             _gl.bindVertexArray(vao);
             let geometry = glBuffer.getGeometry();
@@ -2283,39 +2345,45 @@ CGE.WebGL2Renderer = function() {
             _gl.bindVertexArray(this._vao);
         },
 
-        _applyMaterial: function() {
-            this._glProgram.apply();
+        _applyTextures: function() {
             let count = 0;
             this._textures.forEach(function(glTexture, type) {
-                let location = this._glProgram.getMapLocation(type);
+                let obj = this._glProgram.getUniformLocation(type);
                 glTexture.apply(count);
-                _gl.uniform1i(location, count);
+                _gl.uniform1i(obj.location, count);
                 count++;
             }.bind(this));
+        },
 
+        _applyUniforms: function() {
+
+        },
+
+        _applyState: function() {
+
+        },
+
+        _applyMaterial: function(cameraMatrices) {
+            this._glProgram.apply();
+            
+            this._applyTextures();
+            this._applyUniforms();
             // TODO: support all uniform;
 
-            this._glProgram._uniformLocations.forEach(function(value, key) {
-                _gl.uniformMatrix4fv(value, false, vpMatrix.data);
-            });
-
+            let m = this._glProgram._uniformLocations.get(CGE.UniformType.MVPMatrix);
+            _gl.uniformMatrix4fv(m.location, false, cameraMatrices.viewProjectionMatirx.data);
 
             //TODO: apply state;
         },
 
         generate: function(entity) {
-            let geometry = entity.geometry;
-            let material = entity.material;
-            let shader = material.getShader();
-            let images = material.getMapRequests();
-
-            if (this._initGLObject(geometry, shader, images) === undefined) {
+            let check = this.checkGLObject(entity);
+            if (check === undefined) {
                 this.setGenerated(false);
                 return undefined;
             }
 
-            let vao = this._createVao(this._glBuffer, shader);
-            if (vao === undefined) {
+            if (this._createVao(entity.material.getShader()) === undefined) {
                 this.setGenerated(false);
                 return undefined;
             }
@@ -2323,10 +2391,23 @@ CGE.WebGL2Renderer = function() {
             let version = entity.getUpdateVersion();
             this.setLocalVersion(version);
             this.setGenerated(true);
+            this._entity = entity;
         },
 
-        apply: function() {
-            this._applyMaterial();
+        checkGLObject: function(entity) {
+            let geometry = entity.geometry;
+            let material = entity.material;
+            let shader = material.getShader();
+            let images = material.getMapRequests();
+
+            if (this._initGLObject(geometry, shader, images) === undefined) {
+                return undefined;
+            }
+            return this;
+        },
+
+        apply: function(cameraMatrices) {
+            this._applyMaterial(cameraMatrices);
             this._applyVao();
         },
 
@@ -2335,10 +2416,10 @@ CGE.WebGL2Renderer = function() {
         },
     });
 
-    this.applyEntity = function(entity) {
+    this._applyEntity = function(entity, cameraMatrices) {
         let glMesh = initializedMap.get(entity.id);
         if (glMesh !== undefined && glMesh.getLocalVersion() === entity.getUpdateVersion()) {
-            glMesh.generate(entity);
+            glMesh.checkGLObject(entity);
         } else {
             glMesh = new _glMesh(entity);
             if (!glMesh.isGenerated()) {
@@ -2346,14 +2427,21 @@ CGE.WebGL2Renderer = function() {
             }
             initializedMap.set(entity.id, glMesh);
         }
-        glMesh.apply();
+        glMesh.apply(cameraMatrices);
         glMesh.draw();
+    };
+
+    this._applyCamera = function(camera) {
+        cameraMatrices.viewMatirx.copy(camera.getMatrix());
+        cameraMatrices.projectionMatirx.copy(camera.getProjectionMatrix());
+        cameraMatrices.viewProjectionMatirx.copy(camera.getViewProjectionMatrix());
     };
 
     this.renderSingle = function(entity, camera) {
         this.clear(isClearColor, isClearDepth, isClearStencil);
-        vpMatrix.copy(camera.getViewProjectionMatrix()).applyMatrix4(entity.transform.getMatrix());
-        this.applyEntity(entity);
+        this._applyCamera(camera);
+        this._applyEntity(entity, cameraMatrices);
+        renderCount++;
     };
 
     this.renderMesh = function(mesh, camera) {
