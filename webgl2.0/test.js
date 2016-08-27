@@ -2,6 +2,11 @@
 
 // import CGE from './main.js'
 
+let noError = true;
+window.onerror = function(event) {
+    noError = false;
+}
+
 let vertexShaderText = "#version 300 es\n\
 layout(location = 0) in vec4 Position;\n\
 layout(location = 1) in vec3 Color;\n\
@@ -107,37 +112,48 @@ vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_
 vertexbuffer.setIndexData(indexData);
 vertexbuffer.setDrawParameter(3);
 
-
-let shader = new CGE.Shader();
-shader.setShaderText(vertexShaderText, fragmentShaderText);
-shader.addAttribLocation(CGE.AttribType.POSITION, 0);
-shader.addAttribLocation(CGE.AttribType.COLOR, 1);
-shader.addAttribLocation(CGE.AttribType.UV0, 2);
-shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
-shader.addUniformName(CGE.UniformType.MVPMatrix, 'mvpMatrix');
-
 let texture = new CGE.Texture2d();
-texture.setImageSrc('qiang.jpg');
-texture.setFilter(CGE.NEAREST, CGE.NEAREST);
+texture.setImageSrc('blue_diff.jpg');
+texture.setMipmap(true);
+texture.setFilter(CGE.LINEAR_MIPMAP_LINEAR, CGE.LINEAR);
 
 let material = new CGE.BaseMaterial();
 material.setDiffuseMap(texture);
 
-let mesh = new CGE.Mesh(vertexbuffer, material);
-mesh.transform.setPosition(new CGE.Vector3(1,0,0));
+let material2 = new CGE.ColorMaterial();
+material2.setColor(0.2, 0.5, 0.4, 1.0);
+
+// let mesh = new CGE.Mesh(vertexbuffer, material);
+// mesh.transform.setPosition(new CGE.Vector3(1,0,0));
 
 let entity = new CGE.Entity();
 entity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
-entity.addComponent(CGE.Component.CreateMaterialComponent(material));
+entity.addComponent(CGE.Component.CreateMaterialComponent(material2));
 entity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
 
-let rad = 0;
+let transform = new CGE.Transform();
+transform.setPosition(new CGE.Vector3(0.5, 0, -0.1));
 
+let entity2 = new CGE.Entity();
+entity2.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
+entity2.addComponent(CGE.Component.CreateMaterialComponent(material));
+entity2.addComponent(CGE.Component.CreateTransfromComponent(transform));
+
+let cameraEntity = new CGE.Entity();
+cameraEntity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
+cameraEntity.addComponent(CGE.Component.CreateCameraComponent(camera));
+
+let scene = new CGE.Scene();
+scene.addEntity(entity);
+scene.addEntity(entity2);
+scene.setMainCamera(cameraEntity);
+
+let rad = 0;
 let render = function() {
     rad += 0.01 * Math.PI;
     camera.setPosition(new CGE.Vector3(1*Math.sin(rad), 1*Math.cos(rad), 1));
-    camera.update();
-    renderer.renderSingle(entity, camera);
+    scene.update();
+    renderer.renderScene(scene);
 };
 
 let test_mat4 = new CGE.Matrix4();
@@ -187,4 +203,6 @@ xmlHttp.open('GET', './box01.obj', true);
 xmlHttp.send(null);
 
 render();
-loop();
+if (noError) {
+    loop();
+}
