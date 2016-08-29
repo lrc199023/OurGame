@@ -112,6 +112,13 @@ vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_
 vertexbuffer.setIndexData(indexData);
 vertexbuffer.setDrawParameter(3);
 
+let vertexbuffer_test = new CGE.BufferGeometry();
+vertexbuffer_test.addSingleAttribute('Position', CGE.AttribType.POSITION, 3, CGE.FLOAT, teapotPositions);
+vertexbuffer_test.addSingleAttribute('UV0', CGE.AttribType.UV0, 2, CGE.FLOAT, teapotTexCoords);
+vertexbuffer_test.addSingleAttribute('Normal', CGE.AttribType.NORMAL, 3, CGE.FLOAT, teapotNormals);
+vertexbuffer_test.setIndexData(teapotIndices);
+vertexbuffer_test.setDrawParameter(teapotIndices.length);
+
 let texture = new CGE.Texture2d();
 texture.setImageSrc('blue_diff.jpg');
 texture.setMipmap(true);
@@ -127,12 +134,13 @@ material2.setColor(0.2, 0.5, 0.4, 1.0);
 // mesh.transform.setPosition(new CGE.Vector3(1,0,0));
 
 let entity = new CGE.Entity();
-entity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
+entity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer_test));
 entity.addComponent(CGE.Component.CreateMaterialComponent(material2));
 entity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
 
 let transform = new CGE.Transform();
 transform.setPosition(new CGE.Vector3(0.5, 0, -0.1));
+transform.setScale(new CGE.Vector3(100, 100, 0));
 
 let entity2 = new CGE.Entity();
 entity2.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
@@ -151,7 +159,7 @@ scene.setMainCamera(cameraEntity);
 let rad = 0;
 let render = function() {
     rad += 0.01 * Math.PI;
-    camera.setPosition(new CGE.Vector3(1*Math.sin(rad), 1*Math.cos(rad), 1));
+    camera.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
     scene.update();
     renderer.renderScene(scene);
 };
@@ -199,7 +207,7 @@ xmlHttp.onreadystatechange = function() {
     }
 }
 
-xmlHttp.open('GET', './box01.obj', true);
+xmlHttp.open('GET', './teapot.js', true);
 xmlHttp.send(null);
 
 render();

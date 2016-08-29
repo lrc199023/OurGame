@@ -1802,7 +1802,7 @@ CGE.Mesh = function(geometry, material) {
 //======================================= Entity =========================================
 
 CGE.Entity = function() {
-    CGE.VersionObject.call(this);
+    CGE.Object.call(this);
     Object.assign(this, {
         _parent: undefined,
         _children: [],
@@ -1815,7 +1815,7 @@ CGE.Entity = function() {
     });
 };
 
-CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
+CGE.Entity.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     constructor: CGE.Entity,
 
     update: function() {
@@ -1850,7 +1850,6 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
             }
             component.setEntity(this);
             this._components.set(component.getType(), component);
-            this.needsUpdate();
         }
     },
 
@@ -1893,7 +1892,6 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
             }
             component.setEntity(undefined);
             this._components.delete(type);
-            this.needsUpdate();
         }
     },
 
@@ -2018,7 +2016,6 @@ CGE.WebGL2Renderer = function() {
     // glBuffer --->  bufferGeometry
     // glProgram  ---> material & shader
     // glTexturexd  ----> texturexd
-    // glMesh -----> entity
     // glFrame -----> renderTarget
 
     let renderCount = 0;
@@ -2064,7 +2061,6 @@ CGE.WebGL2Renderer = function() {
         Object.assign(this, {
             _localVersion: -1,
             _renderCount: renderCount,
-            _generated: false,
         });
     }
 
@@ -2079,12 +2075,8 @@ CGE.WebGL2Renderer = function() {
             this._localVersion = version;
         },
 
-        setGenerated: function(b) {
-            this._generated = b;
-        },
-
-        isGenerated: function() {
-            return this._generated;
+        checkVersion: function(version) {
+            return version - _localVersion;
         },
 
         checkRenderCount: function() {
@@ -2096,15 +2088,15 @@ CGE.WebGL2Renderer = function() {
         },
     });
 
-    let _glBuffer = function(geometry) { 
+    let _glBuffer = function() { 
         _glObject.call(this);
         Object.assign(this, {
             _vbos: [],
             _ibo: undefined,
             _draw: undefined,
+            // TODO: remove this;
             _geometry: undefined,
         });
-        this.generateFromGeometry(geometry);
     };
 
     _glBuffer.prototype = Object.assign(Object.create(_glObject.prototype), {
@@ -2126,7 +2118,6 @@ CGE.WebGL2Renderer = function() {
             let drawParameter = geometry.getDrawParameter();
 
             if (attributeDatas.length === 0) {
-                this.setGenerated(false);
                 return undefined;
             }
 
@@ -2137,15 +2128,15 @@ CGE.WebGL2Renderer = function() {
                 this._vbos.push(vbo);
             }.bind(this));
 
-            if (geometry.indexData) {
-                this._ibo = _this._createBufferFromData(_gl.ELEMENT_ARRAY_BUFFER, indexData.data, indexData.usage);
-                this._draw = new _glDrawWithIndex(drawParameter.mode, drawParameter.offset, drawParameter.count, indexData.type);
+            if (geometry._indexData) {
+                this._ibo = this._createBufferFromData(_gl.ELEMENT_ARRAY_BUFFER, indexData.data, indexData.usage);
+                this._draw = new _glDrawWithIndex(drawParameter.mode, drawParameter.offset, drawParameter.count, indexData.type, this._ibo);
             } else {
                 this._draw = new _glDraw(drawParameter.mode, drawParameter.offset, drawParameter.count, 0);
             }
             
             this.setLocalVersion(version);
-            this.setGenerated(true);
+            return this;
         },
 
         getGeometry: function() {
@@ -2175,6 +2166,7 @@ CGE.WebGL2Renderer = function() {
             _offset: offset,
             _count: count,
             _type: type,
+            
         });
     };
 
@@ -2185,12 +2177,14 @@ CGE.WebGL2Renderer = function() {
         },
     }); 
 
-    let _glDrawWithIndex = function(mode, offset, count, type) {
+    let _glDrawWithIndex = function(mode, offset, count, type, ibo) {
         _glDraw.call(this, mode, offset, count, type);
+        this._ibo = ibo;
     };
     _glDrawWithIndex.prototype = Object.assign(Object.create(_glDrawWithIndex.prototype), {
         constructor: _glDrawWithIndex,
         apply: function() {
+            _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, this._ibo);
             _gl.drawElements(this._mode, this._count, this._type, this._offset);
         },
     });
@@ -2213,13 +2207,12 @@ CGE.WebGL2Renderer = function() {
         },
     });
 
-    let _glTexture2D = function(texture2D) {
+    let _glTexture2D = function() {
         _glTexture.call(this);
         Object.assign(this, {
             _wrapS: _gl.CLAMP_TO_EDGE,
             _wrapT: _gl.CLAMP_TO_EDGE,
         });
-        this.generateFromTexture2D(texture2D);
     };
 
     _glTexture2D.prototype = Object.assign(Object.create(_glTexture.prototype), {
@@ -2251,7 +2244,6 @@ CGE.WebGL2Renderer = function() {
 
             let texture = this._createTextureFromTexture2D(texture2D);
             if (texture === undefined) {
-                this.setGenerated(false);
                 return undefined;
             }
             this._texture = texture;
@@ -2261,7 +2253,7 @@ CGE.WebGL2Renderer = function() {
             this.setWarp(texture2D.getWrapS(), texture2D.getWrapT());
 
             this.setLocalVersion(version);
-            this.setGenerated(true);
+            return this;
         },
 
         apply: function(index) {
@@ -2279,14 +2271,13 @@ CGE.WebGL2Renderer = function() {
         }
     });
 
-    let _glProgram = function(shader) {
+    let _glProgram = function() {
         _glObject.call(this);
         Object.assign(this, {
             _program: undefined,
             _matrixLocations: new Map(),
             _uniformLocations: new Map(),
         });
-        this.generateFromShader(shader);
     };
 
     _glProgram.prototype = Object.assign(Object.create(_glObject.prototype), {
@@ -2357,7 +2348,6 @@ CGE.WebGL2Renderer = function() {
             let program = this._createProgramFromText(shader.getVertexShaderText(), shader.getFragmentShaderText());
 
             if (program === undefined) {
-                this.setGenerated(false);
                 return undefined;
             }
 
@@ -2366,7 +2356,7 @@ CGE.WebGL2Renderer = function() {
             this._createUniformLocationMap(shader.getUniformNameMap(), this._uniformLocations);
             
             this.setLocalVersion(version);
-            this.setGenerated(true);
+            return this;
         },
 
         apply: function() {
@@ -2441,9 +2431,8 @@ CGE.WebGL2Renderer = function() {
         if (glBuffer !== undefined && glBuffer.getLocalVersion() === geometry.getUpdateVersion()) 
             return glBuffer;
 
-        glBuffer = new _glBuffer(geometry);
-
-        if (glBuffer.isGenerated()) {
+        glBuffer = new _glBuffer();
+        if (glBuffer.generateFromGeometry(geometry)) {
             initializedMap.set(geometry.id, glBuffer);
             return glBuffer;
         }
@@ -2454,12 +2443,11 @@ CGE.WebGL2Renderer = function() {
         if (glProgram !== undefined && glProgram.getLocalVersion() === shader.getUpdateVersion()) 
             return glProgram;
 
-        glProgram = new _glProgram(shader);
-        if (glProgram.isGenerated()) {
+        glProgram = new _glProgram();
+        if (glProgram.generateFromShader(shader)) {
             initializedMap.set(shader.id, glProgram);
+            return glProgram;
         }
-
-        return glProgram;
     };  
 
     this.initTexture2d = function(texture2d) {
@@ -2467,17 +2455,16 @@ CGE.WebGL2Renderer = function() {
         if (glTexture2d !== undefined && glTexture2d.getLocalVersion() === texture2d.getUpdateVersion()) 
             return glTexture2d;
 
-        glTexture2d = new _glTexture2D(texture2d);
-        if (glTexture2d.isGenerated()) {
+        glTexture2d = new _glTexture2D();
+        if (glTexture2d.generateFromTexture2D(texture2d)) {
             initializedMap.set(texture2d.id, glTexture2d);
             return glTexture2d;
         }
     };
 
-
     // _glMesh's local version is Entity version;
     // TODO: try remove Entity's update version;
-    let _glMesh = function(entity) {
+    let _glMesh = function() {
         _glObject.call(this);
         Object.assign(this, {
             _vao: undefined,
@@ -2486,12 +2473,20 @@ CGE.WebGL2Renderer = function() {
             _glBuffer: undefined,
             _glProgram: undefined,
             _entity: undefined,
+            _2ndLocalVersion: -1,
         });
-        this.generate(entity);
     };
 
     _glMesh.prototype = Object.assign(Object.create(_glObject.prototype), {
         constructor: _glMesh,
+
+        get2ndLocalVersion: function() {
+            return this._2ndLocalVersion;
+        },
+
+        set2ndLocalVersion: function(version) {
+            this._2ndLocalVersion = version;
+        },
 
         _initGLObject: function(geometry, shader, images) {
             let glBuffer = self.initGeometry(geometry);
@@ -2526,7 +2521,6 @@ CGE.WebGL2Renderer = function() {
             _gl.bindVertexArray(vao);
             let geometry = glBuffer.getGeometry();
             let vbos = glBuffer.getVbos();
-            let ibo = glBuffer.getIbo();
             let attributeDatas = geometry.getAttributeDatas();
             for (let i = 0; i < vbos.length; i++) {
                 let attribute = attributeDatas[i];
@@ -2538,8 +2532,10 @@ CGE.WebGL2Renderer = function() {
                         return; 
                     _gl.enableVertexAttribArray(location);
                     _gl.vertexAttribPointer(location, param.num, attribute.type, false, attribute.stride, param.offset);
-                });
+                }.bind(this));
             }
+
+            let ibo = glBuffer.getIbo();
             if (ibo) {
                 _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, ibo);
             }
@@ -2643,19 +2639,19 @@ CGE.WebGL2Renderer = function() {
         generate: function(entity) {
             let check = this.checkGLObject(entity);
             if (check === undefined) {
-                this.setGenerated(false);
                 return undefined;
             }
 
             if (this._createVao(entity.material.getShader()) === undefined) {
-                this.setGenerated(false);
                 return undefined;
             }
 
-            let version = entity.getUpdateVersion();
-            this.setLocalVersion(version);
-            this.setGenerated(true);
+            let geometryVersion = entity.geometry.getUpdateVersion();
+            let shaderVersion = entity.geometry.getUpdateVersion();
+            this.setLocalVersion(geometryVersion);
+            this.set2ndLocalVersion(shaderVersion);
             this._entity = entity;
+            return this;
         },
 
         checkGLObject: function(entity) {
@@ -2680,16 +2676,47 @@ CGE.WebGL2Renderer = function() {
         },
     });
 
-    this._renderEntity = function(entity, cameraMatrices) {
-        let glMesh = initializedMap.get(entity.id);
-        if (glMesh !== undefined && glMesh.getLocalVersion() === entity.getUpdateVersion()) {
-            glMesh.checkGLObject(entity);
-        } else {
-            glMesh = new _glMesh(entity);
-            if (!glMesh.isGenerated()) {
+    let _glMeshManager = {
+        _glMeshMap: new Map(),
+    };
+
+    // meshMap struct: map(bufferId, map(shaderId, glMesh));
+
+    Object.assign(_glMeshManager, {
+
+        addGLMesh: function(geometryId, shaderId, glMesh) {
+            let map = this._glMeshMap.get(geometryId);
+            if (map === undefined) {
+                map = new Map();
+                this._glMeshMap.set(geometryId, map);
+            }
+            map.set(shaderId, glMesh);
+        },
+
+        getGLMesh: function(geometryId, shaderId) {
+            let map = this._glMeshMap.get(geometryId);
+            if (map === undefined) {
                 return undefined;
             }
-            initializedMap.set(entity.id, glMesh);
+            return map.get(shaderId);
+        },
+    });
+
+    this._renderEntity = function(entity, cameraMatrices) {
+        let geometry = entity.geometry;
+        let shader = entity.material.getShader();
+        let glMesh = _glMeshManager.getGLMesh(geometry.id, shader.id);
+        if (glMesh !== undefined
+            && glMesh.getLocalVersion() === geometry.getUpdateVersion() 
+            && glMesh.get2ndLocalVersion() === shader.getUpdateVersion()) {
+            glMesh.checkGLObject(entity);
+        } else {
+            glMesh = new _glMesh();
+            if (glMesh.generate(entity)) {
+                _glMeshManager.addGLMesh(geometry.id, shader.id, glMesh);
+            } else {
+                return undefined;
+            }
         }
         glMesh.apply(cameraMatrices);
         glMesh.draw();
