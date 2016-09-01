@@ -85,6 +85,13 @@ let indexData = new Uint16Array([
     0, 2, 1,
 ]);
 
+
+let renderTarget = new CGE.RenderTarget();
+renderTarget.setSize(512, 512);
+renderTarget.addTexture(CGE.renderTargetLocation.COLOR);
+
+let renderTexrure = renderTarget.getTextureFromType(CGE.renderTargetLocation.COLOR);
+
 let vertexbuffer = new CGE.BufferGeometry();
 
 let attribs = [
@@ -116,6 +123,8 @@ let vertexbuffer_test = new CGE.BufferGeometry();
 vertexbuffer_test.addSingleAttribute('Position', CGE.AttribType.POSITION, 3, CGE.FLOAT, teapotPositions);
 vertexbuffer_test.addSingleAttribute('UV0', CGE.AttribType.UV0, 2, CGE.FLOAT, teapotTexCoords);
 vertexbuffer_test.addSingleAttribute('Normal', CGE.AttribType.NORMAL, 3, CGE.FLOAT, teapotNormals);
+vertexbuffer_test.addSingleAttribute('Binormal', CGE.AttribType.BINORMAL, 3, CGE.FLOAT, teapotBinormals);
+vertexbuffer_test.addSingleAttribute('Tangent', CGE.AttribType.TANGENT, 3, CGE.FLOAT, teapotTangents);
 vertexbuffer_test.setIndexData(teapotIndices);
 vertexbuffer_test.setDrawParameter(teapotIndices.length);
 
@@ -125,27 +134,30 @@ texture.setMipmap(true);
 texture.setFilter(CGE.LINEAR_MIPMAP_LINEAR, CGE.LINEAR);
 
 let material = new CGE.BaseMaterial();
-material.setDiffuseMap(texture);
+material.setDiffuseMap(renderTexrure);
 
 let material2 = new CGE.ColorMaterial();
-material2.setColor(0.2, 0.5, 0.4, 1.0);
+material2.setColor(0.5, 0.5, 1.0, 1.0);
 
 // let mesh = new CGE.Mesh(vertexbuffer, material);
 // mesh.transform.setPosition(new CGE.Vector3(1,0,0));
 
+let transform = new CGE.Transform();
+transform.setPosition(new CGE.Vector3(0.5, 0.5, 1.0));
+
 let entity = new CGE.Entity();
 entity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer_test));
 entity.addComponent(CGE.Component.CreateMaterialComponent(material2));
-entity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
+entity.addComponent(CGE.Component.CreateTransfromComponent(transform));
 
-let transform = new CGE.Transform();
-transform.setPosition(new CGE.Vector3(0.5, 0, -0.1));
-transform.setScale(new CGE.Vector3(100, 100, 0));
+let transform2 = new CGE.Transform();
+transform2.setPosition(new CGE.Vector3(0.5, 0, -0.1));
+transform2.setScale(new CGE.Vector3(100, 100, 0));
 
 let entity2 = new CGE.Entity();
 entity2.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
 entity2.addComponent(CGE.Component.CreateMaterialComponent(material));
-entity2.addComponent(CGE.Component.CreateTransfromComponent(transform));
+entity2.addComponent(CGE.Component.CreateTransfromComponent(transform2));
 
 let cameraEntity = new CGE.Entity();
 cameraEntity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
@@ -153,15 +165,22 @@ cameraEntity.addComponent(CGE.Component.CreateCameraComponent(camera));
 
 let scene = new CGE.Scene();
 scene.addEntity(entity);
-scene.addEntity(entity2);
+// scene.addEntity(entity2);
 scene.setMainCamera(cameraEntity);
+
+let scene2 = new CGE.Scene();
+// scene2.addEntity(entity);
+scene2.addEntity(entity2);
+scene2.setMainCamera(cameraEntity);
 
 let rad = 0;
 let render = function() {
     rad += 0.01 * Math.PI;
     camera.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
     scene.update();
-    renderer.renderScene(scene);
+    scene2.update();
+    renderer.renderScene(scene, renderTarget);
+    renderer.renderScene(scene2);
 };
 
 let test_mat4 = new CGE.Matrix4();
@@ -210,6 +229,7 @@ xmlHttp.onreadystatechange = function() {
 xmlHttp.open('GET', './teapot.js', true);
 xmlHttp.send(null);
 
+render();
 render();
 if (noError) {
     loop();

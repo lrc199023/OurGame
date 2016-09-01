@@ -80,6 +80,12 @@ Object.assign( CGE, {
         Light                       : CGE.getTypeCount(),
     },
 
+    renderTargetLocation: {
+        COLOR                       : 0,
+        NORMAL                      : 1,
+        // TODO: Add more render target type;
+    },
+
     ZERO                           : 0,
     ONE                            : 1,
     SRC_COLOR                      : 0x0300,
@@ -1212,7 +1218,7 @@ CGE.Shader.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
         this._requireRenderLocarions.set(renderType, location);
     },
 
-    addRenderLocation: function(array) {
+    addRenderLocations: function(array) {
         array.forEach(function(object){
             this._requireRenderLocarions.set(object.type, object.location);
         });
@@ -1347,6 +1353,7 @@ CGE.Texture2d.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
     setSize: function(width, height) {
         this._width = width;
         this._height = height;
+        this.needsUpdate();
     },
 });
 
@@ -1973,6 +1980,11 @@ CGE.RenderTarget = function() {
     CGE.VersionObject.call(this);
     Object.assign(this, {
         _textures: new Map(),
+        _width: 0,
+        _height: 0,
+        _isFollowScreen: false,
+        _offset: new CGE.Vector4(),
+        _needsDepthStencil: true,
     });
 };
 
@@ -1981,6 +1993,51 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
 
     update: function() {
 
+    },
+
+    setNeedsDepthStencil: function(b) {
+        this._needsDepthStencil = b === true;
+    },
+
+    isNeedsDepthStencil: function(b) {
+        return this._needsDepthStencil;
+    },
+
+    ifFollowScreen: function() {
+        return this._isFollowScreen;
+    },
+
+    setFollowScreen: function(b) {
+        this._isFollowScreen = b === false;
+    },
+
+    setSize: function(width, height) {
+        this._width = width;
+        this._height = height;
+        this.needsUpdate();
+    },
+
+    setOffset: function(vector4) {
+        this._offset.copy(vector4);
+    },
+
+    addTexture: function(targetType, format, dataType) {
+        let __format = format || CGE.RGB;
+        let __dataType = dataType || CGE.UNSIGNED_BYTE;
+
+        let texture2d = new CGE.Texture2d();
+        texture2d.setSize(this._width, this._height);
+        texture2d.setFormat(__format, __format);
+        texture2d.setType(__dataType);
+        this._textures.set(targetType, texture2d);
+    },
+
+    getTextureFromType: function(targetType) {
+        return this._textures.get(targetType);
+    },
+
+    getTextureMap: function() {
+        return this._textures;
     },
 });
 
@@ -2204,6 +2261,10 @@ CGE.WebGL2Renderer = function() {
         setFilter: function(min, mag) {
             this._minFilter = min;
             this._magFilter = mag;
+        },
+
+        getHandler: function() {
+            return this._texture;
         },
     });
 
@@ -2605,7 +2666,6 @@ CGE.WebGL2Renderer = function() {
                         break;
                     default:
                         return undefined;
-                        break;
                 }
                 glProgram.setUniformData(type, location, matrix.data);
             });
@@ -2730,7 +2790,83 @@ CGE.WebGL2Renderer = function() {
         }
     };
 
-    this.renderScene = function(scene) {
+    let BaseFrameAttachment = _gl.COLOR_ATTACHMENT0;
+    let maxFrameAttachment = _gl.getParameter(_gl.MAX_COLOR_ATTACHMENTS);
+
+    let _glFrame = function() {
+        _glObject.call(this);
+        Object.assign(this, {
+            _frame: undefined,
+            _drawBufferMap: new Map(),
+            _drawBuffers: [],
+        });
+    };
+
+    _glFrame.prototype = Object.assign(Object.create(_glObject.prototype), {
+        constructor: _glFrame,
+
+        checkTextures: function(textureMap) {
+            let completed = true;
+            textureMap.forEach(function(texture2d, location) {
+                let glTexture = self.initTexture2d(texture2d);
+                if (glTexture === undefined) {
+                    completed = false;
+                }
+                this._drawBufferMap.set(location, glTexture);
+            }.bind(this));
+            return completed;
+        },
+
+        generateFromRenderTarget: function(renderTarget) {
+            let textureMap = renderTarget.getTextureMap();
+            this._drawBuffers = [];
+            if (this.checkTextures(textureMap) === false) {
+                return undefined;
+            }
+            let frameBuffer = _gl.createFramebuffer();
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, frameBuffer);
+            this._drawBufferMap.forEach(function(glTexure2d, location) {
+                if (location >= maxFrameAttachment) {
+                    CGE.Logger.error('current just support ' + maxFrameAttachment + ' attachments, but you set ' + 'location');
+                    return undefined;
+                }
+                let attachment = BaseFrameAttachment + location;
+                this._drawBuffers.push(attachment);
+                _gl.framebufferTexture2D(_gl.FRAMEBUFFER, attachment, _gl.TEXTURE_2D, glTexure2d.getHandler(), 0);
+            }.bind(this));
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
+            this._frame = frameBuffer;
+            return this;
+        },
+
+        apply: function() {
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, this._frame);
+            _gl.drawBuffers(this._drawBuffers);
+        },
+    });
+
+    this.applyRenderTarget = function(renderTarget) {
+        let glFrame = initializedMap.get(renderTarget.id);
+        if (glFrame !== undefined) {
+            if (!glFrame.checkTextures(renderTarget.getTextureMap())) {
+                return undefined;
+            }
+        } else {
+            glFrame = new _glFrame();
+            if (!glFrame.generateFromRenderTarget(renderTarget)) {
+                return undefined;
+            }
+            initializedMap.set(renderTarget.id, glFrame);
+        }
+        glFrame.apply();
+    };
+
+    this.renderScene = function(scene, renderTarget) {
+        if (renderTarget === undefined) {
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
+        } else {
+            self.applyRenderTarget(renderTarget);
+        }
         this.clear(isClearColor, isClearDepth, isClearStencil);
         renderCount++;
         let camera = scene.getMainCamera();
@@ -2745,5 +2881,7 @@ CGE.WebGL2Renderer = function() {
         }.bind(this));
     };
 };
+
+// TODO: add OBJLoader in extension;
 
 // export {CGE as default};
