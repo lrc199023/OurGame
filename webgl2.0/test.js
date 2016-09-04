@@ -53,19 +53,9 @@ renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
 
 let camera = new CGE.Camera(window.innerWidth, window.innerHeight);
-camera.setPosition(new CGE.Vector3(3, 2, 4));
+camera.setPosition(new CGE.Vector3(100, 100, 100));
 camera.lookAt(new CGE.Vector3(0,0,0));
 camera.update();
-
-document.body.appendChild(renderer.getCanvas());
-window.onresize = function() {
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-    renderer.setSize(width, height);
-    camera.resize(width, height);
-    camera.update();
-    render();
-};
 
 window.onmousemove = function(event) {
     // console.log(event);
@@ -88,6 +78,7 @@ let indexData = new Uint16Array([
 ]);
 
 let renderTarget = new CGE.RenderTarget();
+renderTarget.setFollowScreen(true);
 renderTarget.setSize(256, 256);
 renderTarget.enableDepthStencil();
 renderTarget.addTexture(CGE.renderTargetLocation.COLOR);
@@ -183,7 +174,7 @@ scene2.setMainCamera(cameraEntity);
 
 let rad = 0;
 let render = function() {
-    camera.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
+    camera2.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
     scene.update();
     scene2.update();
     renderer.renderScene(scene, renderTarget);
@@ -236,6 +227,20 @@ xmlHttp.onreadystatechange = function() {
 
 xmlHttp.open('GET', './teapot.js', true);
 xmlHttp.send(null);
+
+document.body.appendChild(renderer.getCanvas());
+window.onresize = function() {
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    renderer.setSize(width, height);
+    camera.resize(width, height);
+    camera.update();
+    if (renderTarget.ifFollowScreen()) {
+        renderTarget.setSize(width, height);
+        renderTarget.update();
+    }
+    render();
+};
 
 render();
 render();

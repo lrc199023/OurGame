@@ -2041,6 +2041,7 @@ CGE.RenderTarget = function() {
         _isFollowScreen: false,
         _depthStencilTexture: undefined,
         _state: new CGE.RenderTargetState(),
+        _needsUpdateSize: false,
     });
 };
 
@@ -2048,7 +2049,15 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     constructor: CGE.RenderTarget,
 
     update: function() {
-
+        if (this._needsUpdateSize) {
+            if (this._depthStencilTexture) {
+                this._depthStencilTexture.setSize(this._width, this._height);
+            }
+            this._textures.forEach(function(texture, type) {
+                texture.setSize(this._width, this._height);
+            }.bind(this));
+            this._needsUpdateSize = false;
+        }
     },
 
     getState: function() {
@@ -2088,13 +2097,14 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     },
 
     setFollowScreen: function(b) {
-        this._isFollowScreen = b === false;
+        this._isFollowScreen = b === true;
     },
 
     setSize: function(width, height) {
         this._width = width;
         this._height = height;
         this.needsUpdate();
+        this._needsUpdateSize = true;
         this._state.setViewport(new CGE.Vector4(0, 0, width, height));
     },
 
@@ -2127,7 +2137,7 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     setClearColor: function(color) {
         this._state.setClearColor(true, color);
     },
-});
+ });
 
 //======================================= WebGL2Renderer =========================================
 
@@ -3025,6 +3035,7 @@ CGE.WebGLRenderer = function() {
             }
             _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
             this._frame = frameBuffer;
+            this.setLocalVersion(renderTarget.getUpdateVersion());
             return this;
         },
 
@@ -3036,7 +3047,7 @@ CGE.WebGLRenderer = function() {
 
     this.applyRenderTarget = function(renderTarget) {
         let glFrame = initializedMap.get(renderTarget.id);
-        if (glFrame !== undefined) {
+        if (glFrame && glFrame.getLocalVersion === renderTarget.getUpdateVersion()) {
             if (!glFrame.checkTextures(renderTarget.getTextureMap(), renderTarget.getDepthStencilTexture())) {
                 return undefined;
             }
