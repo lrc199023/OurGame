@@ -41,13 +41,13 @@ function loop() {
                         ||window.msRequestAnimationFrame
                         ||window.oRequestAnimationFrame
                         ||function(a){
-        setTimeout(a, 1000/60);
+        setTimeout(a, 1000/30);
     };
 	animationframe(loop);
 	render();
 };
 
-let renderer = new CGE.WebGL2Renderer();
+let renderer = new CGE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
 renderer.clear(true);
@@ -76,21 +76,25 @@ window.onkeydown = function(event) {
 };
 
 let vertexPositionData = new Float32Array([
-    -0.5, 0.5,  0.8, 0.4, 0.4,  0.0, 0.0,
-    0.5,  0.5,  0.4, 0.8, 0.4,  1.0, 0.0,
-    0,   -0.5,  0.4, 0.4, 0.8,  0.5, 1.0,
+    -1.0, 1.0,  0.0, 0.0,
+    1.0,  1.0,  1.0, 0.0,
+    1.0, -1.0,  1.0, 1.0,
+    -1.0, -1.0, 0.0, 1.0,
 ]);
 
 let indexData = new Uint16Array([
     0, 2, 1,
+    2, 0, 3, 
 ]);
 
-
 let renderTarget = new CGE.RenderTarget();
-renderTarget.setSize(512, 512);
+renderTarget.setSize(256, 256);
+renderTarget.enableDepthStencil();
 renderTarget.addTexture(CGE.renderTargetLocation.COLOR);
 
 let renderTexrure = renderTarget.getTextureFromType(CGE.renderTargetLocation.COLOR);
+// renderTexrure = renderTarget.getDepthStencilTexture();
+
 
 let vertexbuffer = new CGE.BufferGeometry();
 
@@ -102,22 +106,16 @@ let attribs = [
         offset: 0,
     },
     {
-        name: 'Color',
-        attribute: CGE.AttribType.COLOR, 
-        num: 3,
-        offset: vertexPositionData.BYTES_PER_ELEMENT * 2,
-    },
-    {
-        name: 'UV0',
+        name: 'UV',
         attribute: CGE.AttribType.UV0, 
         num: 2,
-        offset: vertexPositionData.BYTES_PER_ELEMENT * 5,
+        offset: vertexPositionData.BYTES_PER_ELEMENT * 2,
     },
 ];
 
-vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_ELEMENT * 7, vertexPositionData);
+vertexbuffer.addMultiAttribute(attribs, CGE.FLOAT, vertexPositionData.BYTES_PER_ELEMENT * 4, vertexPositionData);
 vertexbuffer.setIndexData(indexData);
-vertexbuffer.setDrawParameter(3);
+vertexbuffer.setDrawParameter(indexData.length);
 
 let vertexbuffer_test = new CGE.BufferGeometry();
 vertexbuffer_test.addSingleAttribute('Position', CGE.AttribType.POSITION, 3, CGE.FLOAT, teapotPositions);
@@ -152,7 +150,7 @@ entity.addComponent(CGE.Component.CreateTransfromComponent(transform));
 
 let transform2 = new CGE.Transform();
 transform2.setPosition(new CGE.Vector3(0.5, 0, -0.1));
-transform2.setScale(new CGE.Vector3(100, 100, 0));
+transform2.setScale(new CGE.Vector3(50, 50, 0));
 
 let entity2 = new CGE.Entity();
 entity2.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer));
@@ -163,10 +161,20 @@ let cameraEntity = new CGE.Entity();
 cameraEntity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
 cameraEntity.addComponent(CGE.Component.CreateCameraComponent(camera));
 
+let camera2 = new CGE.Camera(256, 256);
+camera2.setPosition(new CGE.Vector3(100, 100, 100));
+camera2.lookAt(new CGE.Vector3(0,0,0));
+camera2.update();
+
+let cameraEntity2 = new CGE.Entity();
+cameraEntity2.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
+cameraEntity2.addComponent(CGE.Component.CreateCameraComponent(camera2));
+
 let scene = new CGE.Scene();
 scene.addEntity(entity);
 // scene.addEntity(entity2);
-scene.setMainCamera(cameraEntity);
+scene.setMainCamera(cameraEntity2);
+
 
 let scene2 = new CGE.Scene();
 // scene2.addEntity(entity);
@@ -175,12 +183,12 @@ scene2.setMainCamera(cameraEntity);
 
 let rad = 0;
 let render = function() {
-    rad += 0.01 * Math.PI;
     camera.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
     scene.update();
     scene2.update();
     renderer.renderScene(scene, renderTarget);
     renderer.renderScene(scene2);
+    rad += 0.01 * Math.PI;
 };
 
 let test_mat4 = new CGE.Matrix4();
@@ -232,5 +240,5 @@ xmlHttp.send(null);
 render();
 render();
 if (noError) {
-    loop();
+    // loop();
 }

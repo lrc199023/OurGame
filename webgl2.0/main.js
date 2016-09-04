@@ -123,7 +123,7 @@ Object.assign( CGE, {
     INT                            : 0x1404,
     UNSIGNED_INT                   : 0x1405,
     FLOAT                          : 0x1406,
-
+    UNSIGNED_INT_24_8              : 0x84FA,
 
     DEPTH_ATTACHMENT               : 0x8D00,
     STENCIL_ATTACHMENT             : 0x8D20,
@@ -185,6 +185,7 @@ Object.assign( CGE, {
     ALPHA                          : 0x1906,
     RGB                            : 0x1907,
     RGBA                           : 0x1908,
+    DEPTH_STENCIL                  : 0x84F9,
 
     NEAREST                        : 0x2600,
     LINEAR                         : 0x2601,
@@ -317,12 +318,12 @@ Object.assign(CGE.Vector3.prototype, {
 
 // -------------- Vector4 ----------------
 
-CGE.Vector4 = function() {
+CGE.Vector4 = function(x, y, z, w) {
     Object.assign(this, {
-        x: 0,
-        y: 0,
-        z: 0,
-        w: 0,
+        x: x || 0,
+        y: y || 0,
+        z: z || 0,
+        w: w || 0,
     });
 };
 
@@ -367,16 +368,19 @@ Object.assign(CGE.Vector4.prototype, {
         vec4.w = this.w;
         return vec4;
     },
+
+    copy: function(v) {
+        this.x = v.x;
+        this.y = v.y;
+        this.z = v.z;
+        this.w = v.w;
+    },
 });
 
 // -------------- Quaternion ----------------
 
-CGE.Quaternion = function() {
-    CGE.Vector4.call(this);
-    this.x = 0;
-    this.y = 0;
-    this.z = 0;
-    this.w = 1;
+CGE.Quaternion = function(x, y, z, w) {
+    CGE.Vector4.call(this, x, y, z, w);
 };
 
 CGE.Quaternion.prototype = Object.assign(Object.create(CGE.Vector4.prototype), {
@@ -1149,21 +1153,21 @@ CGE.Shader.prototype = Object.assign(Object.create(CGE.VersionObject.prototype),
         return this._fragmentShaderText;
     },
 
-    addAttribLocation: function(attribType, location) {
-        this._requireAttributeLocations.set(attribType, location);
+    addAttribName: function(attribType, name) {
+        this._requireAttributeLocations.set(attribType, name);
     },
 
-    addAttribLocations: function(array) {
+    addAttribNames: function(array) {
         array.forEach(function(object){
-            this._requireAttributeLocations.set(object.type, object.location);
+            this._requireAttributeLocations.set(object.type, object.name);
         });
     },
 
-    getAttribLocation: function(attribType) {
+    getAttribName: function(attribType) {
         return this._requireAttributeLocations.get(attribType);
     },
 
-    getAttribLocationMap: function() {
+    getAttribNameMap: function() {
         return this._requireAttributeLocations;
     },
 
@@ -1408,31 +1412,41 @@ Object.assign(CGE.ColorMaterial, {
         let shader = undefined;
         return function getShader() {
             if (shader === undefined) {
-                let vertexShaderText = "#version 300 es\n\
-                layout(location = 0) in vec4 Position;\n\
-                out vec4 o_color;\n\
+                let vertexShaderText = "#version 100\n\
+                attribute vec4 Position;\n\
+                attribute vec4 Normal;\n\
+                varying vec4 o_color;\n\
+                varying vec4 o_normal;\n\
                 uniform mat4 mvpMatrix; \n\
                 uniform vec4 color; \n\
                 void main()\n\
                 {\n\
                     o_color = color;\n\
+                    o_normal = Normal; \n\
                     gl_Position = mvpMatrix * Position;\n\
                 }";
 
-                let fragmentShaderText = "#version 300 es\n\
+                let fragmentShaderText = "#version 100\n\
                 precision mediump float;\n\
-                in vec4 o_color; \n\
-                layout(location = 0) out vec4 fragColor;\n\
+                varying vec4 o_color; \n\
+                varying vec4 o_normal;\n\
+                uniform mat4 NormalWMatrix; \n\
+                vec3 DIR_LIGHT = vec3(-200.0, -300.0, -300.0);\n\
                 \n\
                 void main()\n\
                 {\n\
-                    fragColor = o_color;\n\
+                    vec3 normal = normalize((NormalWMatrix*o_normal).xyz); \n\
+                    vec3 light = normalize(DIR_LIGHT); \n\
+                    gl_FragColor = max(dot(light, normal), 0.0) * o_color;\n\
+                    gl_FragColor.w = 1.0;\n\
                 }";
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
-                shader.addAttribLocation(CGE.AttribType.POSITION, 0);
+                shader.addAttribName(CGE.AttribType.POSITION, 'Position');
+                shader.addAttribName(CGE.AttribType.NORMAL, 'Normal');
                 shader.addUniformName(CGE.UniformType.COLOR, 'color', CGE.FLOAT_VEC4);
                 shader.addMatrixName(CGE.MatrixType.MVPMatrix, 'mvpMatrix');
+                shader.addMatrixName(CGE.MatrixType.NormalWMatrix, 'NormalWMatrix');
             }
             return shader;
         };
@@ -1470,10 +1484,10 @@ Object.assign(CGE.BaseMaterial, {
         let shader = undefined;
         return function getShader() {
             if (shader === undefined) {
-                let vertexShaderText = "#version 300 es\n\
-                layout(location = 0) in vec4 Position;\n\
-                layout(location = 1) in vec2 UV;\n\
-                out vec2 o_uv; \n\
+                let vertexShaderText = "#version 100\n\
+                attribute vec4 Position;\n\
+                attribute vec2 UV;\n\
+                varying vec2 o_uv; \n\
                 uniform mat4 mvpMatrix; \n\
                 void main()\n\
                 {\n\
@@ -1481,21 +1495,20 @@ Object.assign(CGE.BaseMaterial, {
                     gl_Position = mvpMatrix * Position;\n\
                 }";
 
-                let fragmentShaderText = "#version 300 es\n\
+                let fragmentShaderText = "#version 100\n\
                 precision mediump float;\n\
-                in vec2 o_uv; \n\
-                layout(location = 0) out vec4 fragColor;\n\
-                uniform sampler2D diffuse[1];\n\
+                varying vec2 o_uv; \n\
+                uniform sampler2D diffuse;\n\
                 \n\
                 void main()\n\
                 {\n\
-                    vec4 color = texture(diffuse[0], o_uv);\n\
-                    fragColor = vec4(color.xyz, 1.0);\n\
+                    vec4 color = texture2D(diffuse, o_uv); \n\
+                    gl_FragColor = vec4(color.xyz, 1.0);\n\
                 }";
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
-                shader.addAttribLocation(CGE.AttribType.POSITION, 0);
-                shader.addAttribLocation(CGE.AttribType.UV0, 1);
+                shader.addAttribName(CGE.AttribType.POSITION, 'Position');
+                shader.addAttribName(CGE.AttribType.UV0, 'UV');
                 shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
                 shader.addMatrixName(CGE.MatrixType.MVPMatrix, 'mvpMatrix');
             }
@@ -1974,17 +1987,60 @@ CGE.Scene.prototype = Object.assign(Object.create(CGE.Object.prototype), {
     },
 });
 
+//======================================= RenderTargetState =========================================
+
+CGE.RenderTargetState = function() {
+    Object.assign(this, {
+        isClearColor: true,
+        clearColor: new CGE.Vector4(1,1,1,1),
+        isClearDepth: false,
+        clearDepth: 1.0,
+        isClearStencil: false,
+        clearStencil: 0,
+        viewport: new CGE.Vector4(),
+    });
+};
+
+Object.assign(CGE.RenderTargetState.prototype, {
+    constructor: CGE.RenderTargetState,
+
+    setClearColor: function(enable, color) {
+        this.isClearColor = enable === true;
+        if (color) {
+            this.clearColor.copy(color);
+        }
+    },
+
+    setClearDepth: function(enable, depth) {
+        this.isClearDepth = enable === true;
+        if (depth) {
+            this.clearDepth = depth;
+        }
+    },
+
+    setClearStencil: function(enable, stencil) {
+        this.isClearStencil = enable === true;
+        if (stencil) {
+            this.clearStencil = stencil;
+        }
+    },
+
+    setViewport: function(offset) {
+        this.viewport.copy(offset);
+    },
+});
+
 //======================================= RenderTarget =========================================
 
 CGE.RenderTarget = function() {
     CGE.VersionObject.call(this);
     Object.assign(this, {
         _textures: new Map(),
-        _width: 0,
-        _height: 0,
+        _width: 64,
+        _height: 64,
         _isFollowScreen: false,
-        _offset: new CGE.Vector4(),
-        _needsDepthStencil: true,
+        _depthStencilTexture: undefined,
+        _state: new CGE.RenderTargetState(),
     });
 };
 
@@ -1993,6 +2049,30 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
 
     update: function() {
 
+    },
+
+    getState: function() {
+        return this._state;
+    },
+
+    getDepthStencilTexture: function() {
+        return this._depthStencilTexture;
+    },
+
+    _createTexture2d: function(format, dataType) {
+        let texture2d = new CGE.Texture2d();
+        texture2d.setSize(this._width, this._height);
+        texture2d.setFormat(format, format);
+        texture2d.setType(dataType);
+        return texture2d;
+    },
+
+    enableDepthStencil: function() {
+        // TODO: check webgl2 why can't used texture to be render target;
+        this._state.setClearDepth(true);
+        this._state.setClearStencil(true);
+        let texture2d = this._createTexture2d(CGE.DEPTH_STENCIL, CGE.UNSIGNED_INT_24_8);
+        this._depthStencilTexture = texture2d;
     },
 
     setNeedsDepthStencil: function(b) {
@@ -2015,20 +2095,24 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
         this._width = width;
         this._height = height;
         this.needsUpdate();
+        this._state.setViewport(new CGE.Vector4(0, 0, width, height));
     },
 
-    setOffset: function(vector4) {
-        this._offset.copy(vector4);
+    getSize: function() {
+        return {
+            w: this._width,
+            h: this._width,
+        }
+    },
+
+    setOffset: function(viewport) {
+        this._state.setViewport(viewport);
     },
 
     addTexture: function(targetType, format, dataType) {
         let __format = format || CGE.RGB;
         let __dataType = dataType || CGE.UNSIGNED_BYTE;
-
-        let texture2d = new CGE.Texture2d();
-        texture2d.setSize(this._width, this._height);
-        texture2d.setFormat(__format, __format);
-        texture2d.setType(__dataType);
+        let texture2d = this._createTexture2d(__format, __dataType);
         this._textures.set(targetType, texture2d);
     },
 
@@ -2039,23 +2123,66 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     getTextureMap: function() {
         return this._textures;
     },
+
+    setClearColor: function(color) {
+        this._state.setClearColor(true, color);
+    },
 });
 
 //======================================= WebGL2Renderer =========================================
 
-CGE.WebGL2Renderer = function() {
+CGE.WebGLRenderer = function() {
     // TODO: The Function name MUST use '_' inital that all called _gl function;
     // TODO: Take unless _gl's function out of constructor;
 
     let _canvas = document.createElement('canvas');
-    let _gl = _canvas.getContext('webgl2', {antialias: true});
-
-    // TODO: Add a class to control gl context;
+    let _gl = _canvas.getContext('webgl', {antialias: true});
 
     if (_gl === undefined) {
-        alert('Can not use webgl 2.0');
+        alert('Can not use webgl');
         return undefined;
     }
+
+    let _ext = {};
+
+    let getExtension = function(extName) {
+        let ext = _gl.getExtension(extName) || _gl.getExtension('WEBKIT_' + extName) || _gl.getExtension('MOZ_' + extName);
+        if (!ext) {
+            alert('Can not use webgl extension ' + extName);
+        }
+        return ext;
+    };
+
+    _ext.OES_vertex_array_object = getExtension("OES_vertex_array_object");
+    _ext.WEBGL_draw_buffers = getExtension("WEBGL_draw_buffers");
+    _ext.OES_standard_derivatives = getExtension("OES_standard_derivatives");
+    _ext.OES_texture_half_float = getExtension("OES_texture_half_float");
+    _ext.OES_texture_float = getExtension("OES_texture_float");
+    _ext.WEBGL_depth_texture = getExtension("WEBGL_depth_texture");
+    _ext.EXT_texture_filter_anisotropic = getExtension("EXT_texture_filter_anisotropic");
+
+    if (!_ext.OES_vertex_array_object 
+        || !_ext.WEBGL_draw_buffers 
+        || !_ext.OES_standard_derivatives
+        || !_ext.OES_texture_half_float
+        || !_ext.OES_texture_float
+        || !_ext.WEBGL_depth_texture
+        || !_ext.EXT_texture_filter_anisotropic) {
+        alert('Can not use webgl extension');
+        return undefined;
+    }
+
+    // _gl.createVertexArray = _ext.OES_vertex_array_object.createVertexArrayOES;
+    // _gl.deleteVertexArray = _ext.OES_vertex_array_object.deleteVertexArrayOES;
+    // _gl.bindVertexArray = _ext.OES_vertex_array_object.bindVertexArrayOES;
+    // _gl.isVertexArray = _ext.OES_vertex_array_object.isVertexArrayOES;
+    // _gl.VERTEX_ARRAY_BINDING = _ext.OES_vertex_array_object.VERTEX_ARRAY_BINDING_OES;
+
+    // _gl.drawBuffers = _ext.WEBGL_draw_buffers.drawBuffersWEBGL;
+    _gl.MAX_COLOR_ATTACHMENTS = _ext.WEBGL_draw_buffers.MAX_COLOR_ATTACHMENTS_WEBGL;
+    // _gl.MAX_DRAW_BUFFERS_WEBGL = _ext.WEBGL_draw_buffers.MAX_DRAW_BUFFERS_WEBGL;
+
+    // TODO: Add a class to control gl context;
 
     _gl.enable(_gl.DEPTH_TEST);
 
@@ -2064,10 +2191,46 @@ CGE.WebGL2Renderer = function() {
         return _gl;
     };
 
+    let clear = function(color, depth, stencil) {
+        _gl.clear(
+            (color ? _gl.COLOR_BUFFER_BIT : 0) |
+            (depth ? _gl.DEPTH_BUFFER_BIT : 0) |
+            (stencil ? _gl.STENCIL_BUFFER_BIT : 0)
+        );
+    };
+
+
+    let defaultTargetState = new CGE.RenderTargetState();
+    let currentTargetState = new CGE.RenderTargetState();
+
+    let applyTergetState = function(state) {
+        let color = state.clearColor;
+        _gl.clearColor(color.x, color.y, color.z, color.w);
+        let viewport = state.viewport;
+        _gl.viewport(viewport.x, viewport.y, viewport.z, viewport.w);
+
+        if (state.isClearDepth !== currentTargetState.isClearDepth) {
+            currentTargetState.isClearDepth = state.isClearDepth;
+            if (state.isClearDepth) {
+                _gl.enable(_gl.DEPTH_TEST);
+            } else {
+                _gl.disable(_gl.DEPTH_TEST);
+            }
+        }
+
+        // if (state.isClearStencil !== currentTargetState.isClearStencil) {
+        //     currentTargetState.isClearStencil = state.isClearStencil;
+        //     if (state.isClearStencil) {
+        //         _gl.enable(_gl.STENCIL_TEST);
+        //     } else {
+        //         _gl.disable(_gl.STENCIL_TEST);
+        //     }
+        // }
+
+        clear(state.isClearColor, state.isClearDepth, state.isClearStencil);
+    };
+
     let self = this;
-    let isClearColor = true;
-    let isClearDepth = true;
-    let isClearStencil = false;
 
     let initializedMap = new Map();
     // glBuffer --->  bufferGeometry
@@ -2075,42 +2238,46 @@ CGE.WebGL2Renderer = function() {
     // glTexturexd  ----> texturexd
     // glFrame -----> renderTarget
 
+    this.getInitializedMap = function() {
+        return initializedMap;
+    };
+
     let renderCount = 0;
+    let screenWidth = 0, 
+        screenHeight = 0;
 
     this.enableDepthTest = function() {
-        isClearDepth = true;
-        _gl.enable(_gl.DEPTH_TEST);
+        defaultTargetState.setCkearDepth(true);
     };
 
     this.disableDepthTest = function() {
-        isClearDepth = false;
-        _gl.disable(_gl.DEPTH_TEST);
+        defaultTargetState.setCkearDepth(false);
     };
 
     this.setSize = function(width, height) {
         _canvas.width = width;
         _canvas.height = height;
-        _gl.viewport(0, 0, width, height);
+        screenWidth = width;
+        screenHeight = height;
+        defaultTargetState.setViewport(new CGE.Vector4(0, 0, width, height));
     };
 
-    this.setOffset = function(offsetX, offsetY) {
-        _gl.viewport(offsetX, offsetY, _canvas.width, _canvas.height);
+    this.setOffset = function(x, y, w, h) {
+        defaultTargetState.setViewport(new CGE.Vector4(x, y, w, h));
     };
 
     this.setClearColor = function(r, g, b, a) {
-        _gl.clearColor(r, g, b, a);
+        defaultTargetState.setClearColor(true, new CGE.Vector4(r, g, b, a));
     };
 
     this.getCanvas = function() {
         return _canvas;
     };
 
-    this.clear = function(color, depth, stencil) {
-        _gl.clear(
-            (color ? _gl.COLOR_BUFFER_BIT : 0) |
-            (depth ? _gl.DEPTH_BUFFER_BIT : 0) |
-            (stencil ? _gl.STENCIL_BUFFER_BIT : 0)
-        );
+    this.clear = function (color, depth, stencil){
+        defaultTargetState.setClearColor(color);
+        defaultTargetState.setClearDepth(depth);
+        defaultTargetState.setClearStencil(stencil);
     };
 
     let _glObject = function() {
@@ -2294,6 +2461,13 @@ CGE.WebGL2Renderer = function() {
             } else {
                 return undefined;
             }
+            this.setFilter(texture2D.getMinFilter(), texture2D.getMagFilter());
+            this.setWarp(texture2D.getWrapS(), texture2D.getWrapT());
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this._minFilter);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this._magFilter);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this._wrapS);
+            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this._wrapT);
+            _gl.texParameteri(_gl.TEXTURE_2D, _ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, 2.0);
             if (texture2D.getMipmap()) {
                 _gl.generateMipmap(_gl.TEXTURE_2D);
             }
@@ -2301,29 +2475,18 @@ CGE.WebGL2Renderer = function() {
         },
 
         generateFromTexture2D: function(texture2D) {
-            let version = texture2D.getUpdateVersion();
-
             let texture = this._createTextureFromTexture2D(texture2D);
             if (texture === undefined) {
                 return undefined;
             }
             this._texture = texture;
-
             this.setLocalVersion(texture2D.getUpdateVersion());
-            this.setFilter(texture2D.getMinFilter(), texture2D.getMagFilter());
-            this.setWarp(texture2D.getWrapS(), texture2D.getWrapT());
-
-            this.setLocalVersion(version);
             return this;
         },
 
         apply: function(index) {
             _gl.activeTexture(_gl.TEXTURE0 + index);
             _gl.bindTexture(_gl.TEXTURE_2D, this._texture);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this._minFilter);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this._magFilter);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this._wrapS);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this._wrapT);
         },
 
         setWarp: function(wrapS, wrapT) {
@@ -2336,6 +2499,7 @@ CGE.WebGL2Renderer = function() {
         _glObject.call(this);
         Object.assign(this, {
             _program: undefined,
+            _attributeLocations: new Map(),
             _matrixLocations: new Map(),
             _uniformLocations: new Map(),
         });
@@ -2404,6 +2568,13 @@ CGE.WebGL2Renderer = function() {
             }.bind(this));
         },
 
+        _createAttributeLocationMap(locationNameMap) {
+            locationNameMap.forEach(function(name, attribType){
+                let location = _gl.getAttribLocation(this._program, name);
+                this._attributeLocations.set(attribType, location);
+            }.bind(this));
+        },
+
         generateFromShader: function(shader) {
             let version = shader.getUpdateVersion();
             let program = this._createProgramFromText(shader.getVertexShaderText(), shader.getFragmentShaderText());
@@ -2413,6 +2584,7 @@ CGE.WebGL2Renderer = function() {
             }
 
             this._program = program;
+            this._createAttributeLocationMap(shader.getAttribNameMap());
             this._createUniformLocationMap(shader.getMatrixNameMap(), this._matrixLocations);
             this._createUniformLocationMap(shader.getUniformNameMap(), this._uniformLocations);
             
@@ -2484,6 +2656,10 @@ CGE.WebGL2Renderer = function() {
 
         getMatrixLocationMap: function() {
             return this._matrixLocations;
+        },
+
+        getAttribLocation: function(attribType) {
+            return this._attributeLocations.get(attribType);
         },
     });
 
@@ -2576,10 +2752,10 @@ CGE.WebGL2Renderer = function() {
             return this;
         },
 
-        _createVao: function(shader) {
+        _createVao: function(glProgram) {
             let glBuffer = this._glBuffer;
-            let vao = _gl.createVertexArray();
-            _gl.bindVertexArray(vao);
+            let vao = _ext.OES_vertex_array_object.createVertexArrayOES();
+            _ext.OES_vertex_array_object.bindVertexArrayOES(vao);
             let geometry = glBuffer.getGeometry();
             let vbos = glBuffer.getVbos();
             let attributeDatas = geometry.getAttributeDatas();
@@ -2588,7 +2764,7 @@ CGE.WebGL2Renderer = function() {
                 let vbo = vbos[i];
                 _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
                 attribute.attribPointers.forEach(function(param){
-                    let location = shader.getAttribLocation(param.attribute);
+                    let location = glProgram.getAttribLocation(param.attribute);
                     if (location === undefined) 
                         return; 
                     _gl.enableVertexAttribArray(location);
@@ -2600,13 +2776,13 @@ CGE.WebGL2Renderer = function() {
             if (ibo) {
                 _gl.bindBuffer(_gl.ELEMENT_ARRAY_BUFFER, ibo);
             }
-            _gl.bindVertexArray(null);
+            _ext.OES_vertex_array_object.bindVertexArrayOES(null);
             this._vao = vao;
             return this;
         },
 
         _applyVao: function() {
-            _gl.bindVertexArray(this._vao);
+            _ext.OES_vertex_array_object.bindVertexArrayOES(this._vao);
         },
 
         _applyTextures: function() {
@@ -2702,7 +2878,7 @@ CGE.WebGL2Renderer = function() {
                 return undefined;
             }
 
-            if (this._createVao(entity.material.getShader()) === undefined) {
+            if (this._createVao(this._glProgram) === undefined) {
                 return undefined;
             }
 
@@ -2797,6 +2973,7 @@ CGE.WebGL2Renderer = function() {
         _glObject.call(this);
         Object.assign(this, {
             _frame: undefined,
+            _depthStencil: undefined,
             _drawBufferMap: new Map(),
             _drawBuffers: [],
         });
@@ -2805,7 +2982,7 @@ CGE.WebGL2Renderer = function() {
     _glFrame.prototype = Object.assign(Object.create(_glObject.prototype), {
         constructor: _glFrame,
 
-        checkTextures: function(textureMap) {
+        checkTextures: function(textureMap, depthStencilTexture) {
             let completed = true;
             textureMap.forEach(function(texture2d, location) {
                 let glTexture = self.initTexture2d(texture2d);
@@ -2814,13 +2991,22 @@ CGE.WebGL2Renderer = function() {
                 }
                 this._drawBufferMap.set(location, glTexture);
             }.bind(this));
+
+            if (depthStencilTexture) {
+                let glTexture = self.initTexture2d(depthStencilTexture);
+                if (glTexture !== undefined ) {
+                    this._depthStencil = glTexture;
+                }
+            }
+        
             return completed;
         },
 
         generateFromRenderTarget: function(renderTarget) {
             let textureMap = renderTarget.getTextureMap();
+            let depthStencilTexture = renderTarget.getDepthStencilTexture();
             this._drawBuffers = [];
-            if (this.checkTextures(textureMap) === false) {
+            if (this.checkTextures(textureMap, depthStencilTexture) === false) {
                 return undefined;
             }
             let frameBuffer = _gl.createFramebuffer();
@@ -2834,6 +3020,9 @@ CGE.WebGL2Renderer = function() {
                 this._drawBuffers.push(attachment);
                 _gl.framebufferTexture2D(_gl.FRAMEBUFFER, attachment, _gl.TEXTURE_2D, glTexure2d.getHandler(), 0);
             }.bind(this));
+            if (depthStencilTexture) {
+                _gl.framebufferTexture2D(_gl.FRAMEBUFFER, _gl.DEPTH_STENCIL_ATTACHMENT, _gl.TEXTURE_2D, this._depthStencil.getHandler(), 0);
+            }
             _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
             this._frame = frameBuffer;
             return this;
@@ -2841,14 +3030,14 @@ CGE.WebGL2Renderer = function() {
 
         apply: function() {
             _gl.bindFramebuffer(_gl.FRAMEBUFFER, this._frame);
-            _gl.drawBuffers(this._drawBuffers);
+            _ext.WEBGL_draw_buffers.drawBuffersWEBGL(this._drawBuffers);
         },
     });
 
     this.applyRenderTarget = function(renderTarget) {
         let glFrame = initializedMap.get(renderTarget.id);
         if (glFrame !== undefined) {
-            if (!glFrame.checkTextures(renderTarget.getTextureMap())) {
+            if (!glFrame.checkTextures(renderTarget.getTextureMap(), renderTarget.getDepthStencilTexture())) {
                 return undefined;
             }
         } else {
@@ -2859,15 +3048,18 @@ CGE.WebGL2Renderer = function() {
             initializedMap.set(renderTarget.id, glFrame);
         }
         glFrame.apply();
+        applyTergetState(renderTarget.getState());
     };
 
     this.renderScene = function(scene, renderTarget) {
+        // TODO: renderTarget should be managed by something;
         if (renderTarget === undefined) {
             _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
+            applyTergetState(defaultTargetState);
         } else {
             self.applyRenderTarget(renderTarget);
         }
-        this.clear(isClearColor, isClearDepth, isClearStencil);
+        clear(true, true, false);
         renderCount++;
         let camera = scene.getMainCamera();
         if (camera === undefined) {
@@ -2881,7 +3073,5 @@ CGE.WebGL2Renderer = function() {
         }.bind(this));
     };
 };
-
-// TODO: add OBJLoader in extension;
 
 // export {CGE as default};
