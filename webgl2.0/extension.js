@@ -1,3 +1,15 @@
+CGE.CubeGeometry = function() {
+    CGE.BufferGeometry.call(this);
+};
+
+CGE.CubeGeometry.prototype = Object.assign(Object.create(CGE.VersionObject.prototype), {
+    constructor: CGE.CubeGeometry,
+
+    _initData: function() {
+        
+    },
+});
+
 CGE.DeferredMaterial = function() {
     CGE.Material.call(this);
     Object.assign(this, {
@@ -40,7 +52,8 @@ Object.assign(CGE.DeferredMaterial, {
                 void main() \n\
                 {\n\
                     vec4 color = texture2D(diffuse, o_uv); \n\
-                    gl_FragColor = vec4(color.xyz, 1.0); \n\
+                    gl_FragData[0] = vec4(color.xyz, 1.0); \n\
+                    gl_FragData[0] = vec4(color.xyz, 1.0); \n\
                 }";
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);

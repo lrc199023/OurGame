@@ -1361,6 +1361,39 @@ CGE.Texture2d.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
     },
 });
 
+//======================================= Texture2d =========================================
+
+CGE.TexutreCube = function() {
+    CGE.Texture.call(this);
+    Object.assign(this, {
+        _wrapS: CGE.CLAMP_TO_EDGE,
+        _wrapT: CGE.CLAMP_TO_EDGE,
+        _texture2d: [undefined, undefined, undefined, undefined, undefined, undefined],
+    });
+};
+
+CGE.TexutreCube.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
+    constructor: CGE.TexutreCube,
+
+    setWarp: function(wrapS, wrapT) {
+        this._wrapS = wrapS;
+        this._wrapT = wrapT;
+    },
+
+    setTexture2d: function(positiveX, negativeX, positiveY, negativeY, positiveZ, negativeZ) {
+        this._texture2d[0] = positiveX || this._texture2d[0];
+        this._texture2d[1] = negativeX || this._texture2d[1];
+        this._texture2d[2] = positiveY || this._texture2d[2];
+        this._texture2d[3] = negativeY || this._texture2d[3];
+        this._texture2d[4] = positiveZ || this._texture2d[4];
+        this._texture2d[5] = negativeZ || this._texture2d[5];
+    },
+
+    getTexture2ds: function(){
+        return this._texture2d;
+    },
+});
+
 //======================================= Material =========================================
 
 CGE.Material = function() {
@@ -2050,12 +2083,6 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
 
     update: function() {
         if (this._needsUpdateSize) {
-            if (this._depthStencilTexture) {
-                this._depthStencilTexture.setSize(this._width, this._height);
-            }
-            this._textures.forEach(function(texture, type) {
-                texture.setSize(this._width, this._height);
-            }.bind(this));
             this._needsUpdateSize = false;
         }
     },
@@ -2092,7 +2119,7 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
         return this._needsDepthStencil;
     },
 
-    ifFollowScreen: function() {
+    isFollowScreen: function() {
         return this._isFollowScreen;
     },
 
@@ -2100,12 +2127,26 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
         this._isFollowScreen = b === true;
     },
 
+    _updateTextureSize() {
+        const w = this._width;
+        const h = this._height;
+        if (this._depthStencilTexture) {
+            this._depthStencilTexture.setSize(w, h);
+        }
+        this._textures.forEach(function(texture, type) {
+            texture.setSize(w, h);
+        });
+    },
+
     setSize: function(width, height) {
+        if (this._width === width && this._height === height) {
+            return undefined;
+        }
         this._width = width;
         this._height = height;
-        this.needsUpdate();
-        this._needsUpdateSize = true;
+        this._updateTextureSize();
         this._state.setViewport(new CGE.Vector4(0, 0, width, height));
+        this.needsUpdate();
     },
 
     getSize: function() {
@@ -2194,6 +2235,7 @@ CGE.WebGLRenderer = function() {
 
     // TODO: Add a class to control gl context;
 
+    let ANISOTROPY = 2.0;
     _gl.enable(_gl.DEPTH_TEST);
 
     // this function is ONLY used for DEBUG;
@@ -2456,41 +2498,64 @@ CGE.WebGLRenderer = function() {
     _glTexture2D.prototype = Object.assign(Object.create(_glTexture.prototype), {
         constructor: _glTexture2D,
 
-        _createTextureFromTexture2D: function(texture2D) {
-            let format = texture2D.getFormat();
-            let internalformat = texture2D.getInternalformat();
-            let type = texture2D.getType();
+        _applyParameter: function(target, mipmap) {
+            _gl.texParameteri(target, _gl.TEXTURE_MIN_FILTER, this._minFilter);
+            _gl.texParameteri(target, _gl.TEXTURE_MAG_FILTER, this._magFilter);
+            _gl.texParameteri(target, _gl.TEXTURE_WRAP_S, this._wrapS);
+            _gl.texParameteri(target, _gl.TEXTURE_WRAP_T, this._wrapT);
+            _gl.texParameteri(target, _ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, ANISOTROPY);
+            if (mipmap) {
+                _gl.generateMipmap(target);
+            }
+        },
 
-            let texture = _gl.createTexture();
-            _gl.bindTexture(_gl.TEXTURE_2D, texture);
-            if (texture2D.getImage() !== undefined && texture2D.isLoad()) {
-                let image = texture2D.getImage();
-                _gl.texImage2D(_gl.TEXTURE_2D, 0, internalformat, format, type, image);
-            } else if (texture2D.getWidth() !== 0 && texture2D.getHeight() !== 0) {
-                _gl.texImage2D(_gl.TEXTURE_2D, 0, internalformat, texture2D.getWidth(), texture2D.getHeight(), 0, format, type, null);
+        _setTextureData: function(target, texture) {
+            let format = texture.getFormat();
+            let internalformat = texture.getInternalformat();
+            let type = texture.getType();
+
+            if (texture.getImage() !== undefined && texture.isLoad()) {
+                let image = texture.getImage();
+                _gl.texImage2D(target, 0, internalformat, format, type, image);
+            } else if (texture.getWidth() !== 0 && texture.getHeight() !== 0) {
+                _gl.texImage2D(target, 0, internalformat, texture.getWidth(), texture.getHeight(), 0, format, type, null);
             } else {
                 return undefined;
             }
-            this.setFilter(texture2D.getMinFilter(), texture2D.getMagFilter());
-            this.setWarp(texture2D.getWrapS(), texture2D.getWrapT());
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, this._minFilter);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, this._magFilter);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, this._wrapS);
-            _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, this._wrapT);
-            _gl.texParameteri(_gl.TEXTURE_2D, _ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, 2.0);
-            if (texture2D.getMipmap()) {
-                _gl.generateMipmap(_gl.TEXTURE_2D);
-            }
-            return texture;
+            return this;
         },
 
-        generateFromTexture2D: function(texture2D) {
-            let texture = this._createTextureFromTexture2D(texture2D);
-            if (texture === undefined) {
+        _createTextureDatas: function(texture2d) {
+            let handler = _gl.createTexture();
+            _gl.bindTexture(_gl.TEXTURE_2D, handler);
+            if (this._setTextureData(_gl.TEXTURE_2D, texture2d) === undefined) {
                 return undefined;
             }
-            this._texture = texture;
-            this.setLocalVersion(texture2D.getUpdateVersion());
+            return handler;
+        },
+
+        _applyParameters: function(mipmap) {
+            this._applyParameter(_gl.TEXTURE_2D, mipmap);
+        },
+
+        _createGLTextureFromTexture: function(texture) {
+            let handler = this._createTextureDatas(texture);
+            if (handler === undefined) {
+                return undefined;
+            }
+            this.setFilter(texture.getMinFilter(), texture.getMagFilter());
+            this.setWarp(texture.getWrapS(), texture.getWrapT());
+            this._applyParameters(texture.getMipmap());
+            return handler;
+        },
+
+        generateFromTexture2D: function(texture) {
+            let handler = this._createGLTextureFromTexture(texture);
+            if (handler === undefined) {
+                return undefined;
+            }
+            this._texture = handler;
+            this.setLocalVersion(texture.getUpdateVersion());
             return this;
         },
 
@@ -2503,6 +2568,36 @@ CGE.WebGLRenderer = function() {
             this._wrapS = wrapS;
             this._wrapT = wrapT;
         }
+    });
+
+    let _glTextureCube = function() {
+        _glTexture2D.call(this);
+    };
+
+    _glTextureCube.prototype = Object.assign(Object.create(_glTexture2D.prototype), {
+        constructor: _glTextureCube,
+
+        _createTextureDatas: function(textureCube) {
+            let handler = _gl.createTexture();
+            _gl.bindTexture(_gl.TEXTURE_CUBE_MAP, handler);
+            let textures = textureCube.getTexture2ds();
+            for (let i = 0; i < textures.length; i++) {
+                let texture2d = textures[i];
+                if (textures[i] && this._setTextureData(l.TEXTURE_CUBE_MAP_POSITIVE_X + i, texture2d) === undefined) {
+                    return undefined;
+                }
+            }            
+            return handler;
+        },
+
+        _applyParameters: function(mipmap) {
+            this._applyParameter(_gl.TEXTURE_CUBE_MAP, mipmap);
+        },
+
+        apply: function(index) {
+            _gl.activeTexture(_gl.TEXTURE0 + index);
+            _gl.bindTexture(_gl.TEXTURE_CUBE_MAP, this._texture);
+        },
     });
 
     let _glProgram = function() {
@@ -3046,6 +3141,9 @@ CGE.WebGLRenderer = function() {
     });
 
     this.applyRenderTarget = function(renderTarget) {
+        if (renderTarget.isFollowScreen) {
+            renderTarget.setSize(screenWidth, screenHeight);
+        }
         let glFrame = initializedMap.get(renderTarget.id);
         if (glFrame && glFrame.getLocalVersion === renderTarget.getUpdateVersion()) {
             if (!glFrame.checkTextures(renderTarget.getTextureMap(), renderTarget.getDepthStencilTexture())) {

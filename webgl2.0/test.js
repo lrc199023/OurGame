@@ -235,10 +235,6 @@ window.onresize = function() {
     renderer.setSize(width, height);
     camera.resize(width, height);
     camera.update();
-    if (renderTarget.ifFollowScreen()) {
-        renderTarget.setSize(width, height);
-        renderTarget.update();
-    }
     render();
 };
 
