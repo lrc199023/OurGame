@@ -40,6 +40,7 @@ Object.assign( CGE, {
         SPECULAR            : CGE.getTypeCount(),
         BUMP                : CGE.getTypeCount(),
         DEPTH               : CGE.getTypeCount(),
+        AMBIENT             : CGE.getTypeCount(),
         OTHER0              : CGE.getTypeCount(),
         OTHER1              : CGE.getTypeCount(),
         OTHER2              : CGE.getTypeCount(),
@@ -687,6 +688,10 @@ Object.assign(CGE.Matrix4.prototype, {
         m[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
 
         return this;
+    },
+
+    invertTranspose: function() {
+        return this.transpose().invert();
     },
 
     multiply: function(matrix) {
@@ -1361,9 +1366,21 @@ CGE.Texture2d.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
     },
 });
 
+Object.assign(CGE.Texture2d, {
+    createFromeImage: function(imgSrc, mipmap) {
+        let texture2d = new CGE.Texture2d();
+        texture2d.setImageSrc(imgSrc);
+        if (mipmap === true) {
+            texture2d.setMipmap(true);
+            texture2d.setFilter(CGE.LINEAR_MIPMAP_LINEAR, CGE.LINEAR);
+        }
+        return texture2d;
+    },
+});
+
 //======================================= Texture2d =========================================
 
-CGE.TexutreCube = function() {
+CGE.TextureCube = function() {
     CGE.Texture.call(this);
     Object.assign(this, {
         _wrapS: CGE.CLAMP_TO_EDGE,
@@ -1372,15 +1389,15 @@ CGE.TexutreCube = function() {
     });
 };
 
-CGE.TexutreCube.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
-    constructor: CGE.TexutreCube,
+CGE.TextureCube.prototype = Object.assign(Object.create(CGE.Texture.prototype), {
+    constructor: CGE.TextureCube,
 
     setWarp: function(wrapS, wrapT) {
         this._wrapS = wrapS;
         this._wrapT = wrapT;
     },
 
-    setTexture2d: function(positiveX, negativeX, positiveY, negativeY, positiveZ, negativeZ) {
+    setTexture2ds: function(positiveX, negativeX, positiveY, negativeY, positiveZ, negativeZ) {
         this._texture2d[0] = positiveX || this._texture2d[0];
         this._texture2d[1] = negativeX || this._texture2d[1];
         this._texture2d[2] = positiveY || this._texture2d[2];
@@ -1391,6 +1408,14 @@ CGE.TexutreCube.prototype = Object.assign(Object.create(CGE.Texture.prototype), 
 
     getTexture2ds: function(){
         return this._texture2d;
+    },
+
+    getWrapS: function() {
+        return this._wrapS;
+    },
+
+    getWrapT: function() {
+        return this._wrapT;
     },
 });
 
@@ -1464,7 +1489,7 @@ Object.assign(CGE.ColorMaterial, {
                 varying vec4 o_color; \n\
                 varying vec4 o_normal;\n\
                 uniform mat4 NormalWMatrix; \n\
-                vec3 DIR_LIGHT = vec3(-200.0, -300.0, -300.0);\n\
+                vec3 DIR_LIGHT = vec3(1.0, -1.0, 1.0);\n\
                 \n\
                 void main()\n\
                 {\n\
@@ -2299,11 +2324,11 @@ CGE.WebGLRenderer = function() {
         screenHeight = 0;
 
     this.enableDepthTest = function() {
-        defaultTargetState.setCkearDepth(true);
+        defaultTargetState.setClearDepth(true);
     };
 
     this.disableDepthTest = function() {
-        defaultTargetState.setCkearDepth(false);
+        defaultTargetState.setClearDepth(false);
     };
 
     this.setSize = function(width, height) {
@@ -2549,7 +2574,7 @@ CGE.WebGLRenderer = function() {
             return handler;
         },
 
-        generateFromTexture2D: function(texture) {
+        generateFromTexture: function(texture) {
             let handler = this._createGLTextureFromTexture(texture);
             if (handler === undefined) {
                 return undefined;
@@ -2583,7 +2608,7 @@ CGE.WebGLRenderer = function() {
             let textures = textureCube.getTexture2ds();
             for (let i = 0; i < textures.length; i++) {
                 let texture2d = textures[i];
-                if (textures[i] && this._setTextureData(l.TEXTURE_CUBE_MAP_POSITIVE_X + i, texture2d) === undefined) {
+                if (textures[i] && this._setTextureData(_gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, texture2d) === undefined) {
                     return undefined;
                 }
             }            
@@ -2790,17 +2815,21 @@ CGE.WebGLRenderer = function() {
             initializedMap.set(shader.id, glProgram);
             return glProgram;
         }
-    };  
+    };
 
-    this.initTexture2d = function(texture2d) {
-        let glTexture2d = initializedMap.get(texture2d.id);
-        if (glTexture2d !== undefined && glTexture2d.getLocalVersion() === texture2d.getUpdateVersion()) 
-            return glTexture2d;
-
-        glTexture2d = new _glTexture2D();
-        if (glTexture2d.generateFromTexture2D(texture2d)) {
-            initializedMap.set(texture2d.id, glTexture2d);
-            return glTexture2d;
+    this.initTexture2d = function(texture) {
+        let glTexture = initializedMap.get(texture.id);
+        if (glTexture !== undefined && glTexture.getLocalVersion() === texture.getUpdateVersion()) 
+            return glTexture;
+        if (texture instanceof CGE.Texture2d) {
+            glTexture = new _glTexture2D();
+        } else if (texture instanceof CGE.TextureCube) {
+            glTexture = new _glTextureCube();
+        }
+        
+        if (glTexture.generateFromTexture(texture)) {
+            initializedMap.set(texture.id, glTexture);
+            return glTexture;
         }
     };
 
@@ -2870,7 +2899,7 @@ CGE.WebGLRenderer = function() {
                 _gl.bindBuffer(_gl.ARRAY_BUFFER, vbo);
                 attribute.attribPointers.forEach(function(param){
                     let location = glProgram.getAttribLocation(param.attribute);
-                    if (location === undefined) 
+                    if (location === undefined || location === -1) 
                         return; 
                     _gl.enableVertexAttribArray(location);
                     _gl.vertexAttribPointer(location, param.num, attribute.type, false, attribute.stride, param.offset);
@@ -2937,13 +2966,13 @@ CGE.WebGLRenderer = function() {
                         matrix = getMVPMatrix();
                         break;
                     case CGE.MatrixType.NormalWMatrix:
-                        matrix = worldMatrix.clone().invert();
+                        matrix = worldMatrix.clone().invertTranspose();
                         break;
                     case CGE.MatrixType.NormalMVMatrix:
-                        matrix = getMVMatrix().clone().invert();
+                        matrix = getMVMatrix().clone().invertTranspose();
                         break;
                     case CGE.MatrixType.NormalMVPMatrix:
-                        matrix = getMVPMatrix().clone().invert();
+                        matrix = getMVPMatrix().clone().invertTranspose();
                         break;
                     default:
                         return undefined;

@@ -49,8 +49,9 @@ function loop() {
 
 let renderer = new CGE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.enableDepthTest();
 renderer.setClearColor(1.0, 0.5, 0.5, 1.0);
-renderer.clear(true);
+renderer.clear(true, true);
 
 let camera = new CGE.Camera(window.innerWidth, window.innerHeight);
 camera.setPosition(new CGE.Vector3(100, 100, 100));
@@ -140,7 +141,7 @@ entity.addComponent(CGE.Component.CreateMaterialComponent(material2));
 entity.addComponent(CGE.Component.CreateTransfromComponent(transform));
 
 let transform2 = new CGE.Transform();
-transform2.setPosition(new CGE.Vector3(0.5, 0, -0.1));
+transform2.setPosition(new CGE.Vector3(0, 25, 0));
 transform2.setScale(new CGE.Vector3(50, 50, 0));
 
 let entity2 = new CGE.Entity();
@@ -161,22 +162,54 @@ let cameraEntity2 = new CGE.Entity();
 cameraEntity2.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transform()));
 cameraEntity2.addComponent(CGE.Component.CreateCameraComponent(camera2));
 
+
+let cubeTexture = new CGE.TextureCube();
+cubeTexture.setMipmap(true);
+cubeTexture.setFilter(CGE.LINEAR_MIPMAP_LINEAR, CGE.LINEAR);
+cubeTexture.setTexture2ds(
+    CGE.Texture2d.createFromeImage('./skybox/px.jpg'),
+    CGE.Texture2d.createFromeImage('./skybox/nx.jpg'),
+    CGE.Texture2d.createFromeImage('./skybox/py.jpg'),
+    CGE.Texture2d.createFromeImage('./skybox/ny.jpg'),
+    CGE.Texture2d.createFromeImage('./skybox/pz.jpg'),
+    CGE.Texture2d.createFromeImage('./skybox/nz.jpg')
+);
+
+let cubeMaterial = new CGE.CubeMaterial();
+cubeMaterial.setCubeMap(cubeTexture);
+
+let cubeMapTransform = new CGE.Transform();
+cubeMapTransform.setPosition(new CGE.Vector3(25, 0, 0));
+cubeMapTransform.setScale(new CGE.Vector3(1, 1, 1));
+
+let cubeMapEntity = new CGE.Entity();
+cubeMapEntity.addComponent(CGE.Component.CreateGeometryComponent(vertexbuffer_test));
+cubeMapEntity.addComponent(CGE.Component.CreateMaterialComponent(cubeMaterial));
+cubeMapEntity.addComponent(CGE.Component.CreateTransfromComponent(cubeMapTransform));
+
 let scene = new CGE.Scene();
 scene.addEntity(entity);
 // scene.addEntity(entity2);
 scene.setMainCamera(cameraEntity2);
 
-
 let scene2 = new CGE.Scene();
 // scene2.addEntity(entity);
 scene2.addEntity(entity2);
+scene2.addEntity(cubeMapEntity);
 scene2.setMainCamera(cameraEntity);
 
 let rad = 0;
+
+let quater = new CGE.Quaternion();
+quater.setAxisAngle(new CGE.Vector3(0, 0, 1), 0.01 * Math.PI);
+let testMat4 = new CGE.Matrix4();
+testMat4.makeForQuaternion(quater);
 let render = function() {
-    camera2.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
+    // camera2.setPosition(new CGE.Vector3(100*Math.sin(rad), 100*Math.cos(rad), 100));
     scene.update();
     scene2.update();
+    transform.applyMatrix4(testMat4);
+    cubeMapTransform.applyMatrix4(testMat4);
     renderer.renderScene(scene, renderTarget);
     renderer.renderScene(scene2);
     rad += 0.01 * Math.PI;
