@@ -10,10 +10,13 @@ CGE.CubeGeometry.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     },
 });
 
+// ================================ CubeMaterial ======================================
+
 CGE.CubeMaterial = function() {
     CGE.Material.call(this);
     Object.assign(this, {
        _cubeMap: undefined,
+       _normalMap: undefined,
     });
     let shader = CGE.CubeMaterial.getShader();
     Object.defineProperty(this, "_shader", { value:shader, writable:false });
@@ -24,57 +27,90 @@ Object.assign(CGE.CubeMaterial, {
         let shader = undefined;
         return function getShader() {
             if (shader === undefined) {
-                let vertexShaderText = "#version 100\n\
-                attribute vec4 Position;\n\
-                attribute vec4 Normal;\n\
-                attribute vec2 UV;\n\
-                varying vec2 o_uv; \n\
-                varying vec4 o_normal; \n\
-                varying vec4 o_position; \n\
-                uniform mat4 MVPMatrix; \n\
-                uniform mat4 WMatrix; \n\
-                void main()\n\
-                {\n\
-                    o_uv = UV;\n\
-                    o_normal = Normal;\n\
-                    o_position = WMatrix * Position; \n\
-                    gl_Position = MVPMatrix * Position;\n\
-                }";
+                let vertexShaderText = `#version 100
+                attribute vec4 Position;
+                attribute vec3 Normal;
+                attribute vec2 UV;
+                attribute vec3 Tangent;
+                varying vec2 o_uv;
+                varying vec3 tangentToView0;
+                varying vec3 tangentToView1;
+                varying vec3 tangentToView2;
+                varying vec4 o_position;
+                uniform mat4 MVPMatrix;
+                uniform mat4 MVMatrix;
+                void main()
+                {
+                    vec3 Binormal = normalize(cross(Tangent, Normal));
+                    mat3 normalMatrix = mat3(Tangent, Binormal, Normal);
+                    mat3 MVMatrix3 = mat3(
+                        MVMatrix[0].xyz, 
+                        MVMatrix[1].xyz, 
+                        MVMatrix[2].xyz
+                    );
+                    mat3 tangentToView = MVMatrix3 * normalMatrix;
+                    tangentToView0 = tangentToView[0];
+                    tangentToView1 = tangentToView[1];
+                    tangentToView2 = tangentToView[2];
+                    o_uv = UV;
+                    o_position = MVMatrix * Position;
+                    vec4 position = MVPMatrix * Position;
+                    gl_Position = position;
+                    // gl_Position.z = gl_Position.w;
+                }`;
 
-                let fragmentShaderText = "#version 100\n\
-                precision highp float;\n\
-                varying vec2 o_uv; \n\
-                varying vec4 o_normal; \n\
-                varying vec4 o_position; \n\
-                uniform samplerCube cube; \n\
-                uniform mat4 NormalWMatrix; \n\
-                uniform mat4 WMatrix; \n\
-                vec3 DIR_LIGHT = vec3(-1.0, 1.0, 1.0); \n\
-                vec3 CAMERA = vec3(100.0, 100.0, 100.0); \n\
-                \n\
-                void main() \n\
-                {\n\
-                    vec3 normal = normalize((NormalWMatrix*o_normal).xyz); \n\
-                    vec3 light = normalize(DIR_LIGHT); \n\
-                    vec3 position = o_position.xyz / o_position.w;\n\
-                    vec3 viewDir = normalize(position - CAMERA);\n\
-                    vec3 outDir =  2.0 * dot(viewDir, normal) * normal - viewDir; \n\
-                    vec3 texcoord = vec3(outDir.x, -outDir.z, outDir.y);\n\
-                    vec4 color = textureCube(cube, texcoord); \n\
-                    gl_FragColor = max(dot(light, normal), 0.0) * color;\n\
-                    gl_FragColor = color;\n\
-                    gl_FragColor.w = 1.0;\n\
-                }";
+                let fragmentShaderText = `#version 100
+                #extension GL_EXT_draw_buffers : require
+                precision highp float;
+                varying vec2 o_uv; 
+                varying vec3 tangentToView0;
+                varying vec3 tangentToView1;
+                varying vec3 tangentToView2;
+                varying vec4 o_position;
+                uniform samplerCube cube;
+                uniform sampler2D normalMap;
+                uniform mat4 VMatrix;
+                uniform mat4 InverseVMatrix;
+                vec4 DIR_LIGHT = vec4(1.0, -1.0, 1.0, 0.0);
+                vec3 CAMERA = vec3(100.0, 100.0, 100.0);
+
+                void main()
+                {
+                    vec3 normalTex = texture2D(normalMap, o_uv).xyz;
+                    vec3 normal = (normalTex - vec3(0.5)) * 2.0;
+                    mat3 normalMatrix = mat3(
+                        normalize(tangentToView0), 
+                        normalize(tangentToView1), 
+                        normalize(tangentToView2)
+                    );
+                    normal = normalize(normalMatrix * normal);
+                    vec3 light = normalize((VMatrix * DIR_LIGHT).xyz);
+                    vec3 viewDir = normalize(o_position.xyz);
+                    vec3 outDir =  2.0 * dot(viewDir, normal) * normal - viewDir;
+                    vec3 o_dir = (InverseVMatrix * vec4(outDir, 0.0)).xyz;
+                    vec3 texcoord = vec3(o_dir.x, -o_dir.z, o_dir.y);
+                    vec4 color = textureCube(cube, texcoord);
+                    gl_FragData[0] = max(dot(light, normal)*0.5 + 0.5, 0.0) * color;
+                    normal = normal * 0.5 + vec3(0.5);
+                    gl_FragData[1] = vec4(normal, 0.0);
+                    // gl_FragColor = color; //vec4(normalTex, 1.0); //color;
+                    // gl_FragColor.w = 1.0;
+                }`;
 
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
                 shader.addAttribName(CGE.AttribType.POSITION, 'Position');
                 shader.addAttribName(CGE.AttribType.NORMAL, 'Normal');
+                shader.addAttribName(CGE.AttribType.TANGENT, 'Tangent');
                 shader.addAttribName(CGE.AttribType.UV0, 'UV');
                 shader.addTextureName(CGE.MapType.AMBIENT, 'cube');
-                shader.addMatrixName(CGE.MatrixType.WMatrix, 'WMatrix');
+                shader.addTextureName(CGE.MapType.NORMAL, 'normalMap');
+                shader.addMatrixName(CGE.MatrixType.VMatrix, 'VMatrix');
+                shader.addMatrixName(CGE.MatrixType.MVMatrix, 'MVMatrix');
+                shader.addMatrixName(CGE.MatrixType.InverseVMatrix, 'InverseVMatrix');
                 shader.addMatrixName(CGE.MatrixType.MVPMatrix, 'MVPMatrix');
                 shader.addMatrixName(CGE.MatrixType.NormalWMatrix, 'NormalWMatrix');
+                shader.addMatrixName(CGE.MatrixType.NormalMVMatrix, 'NormalMVMatrix');
             }
             return shader;
         };
@@ -88,16 +124,25 @@ CGE.CubeMaterial.prototype = Object.assign(Object.create(CGE.Material.prototype)
         this._cubeMap = cubeTexture;
     },
 
+    setNormalMap: function(normalTexture) {
+        this._normalMap = normalTexture;
+    },
+
     getMapProvide: function() {
          return [
             {
                 map: this._cubeMap,
                 type: CGE.MapType.AMBIENT,
             },
+            {
+                map: this._normalMap,
+                type: CGE.MapType.NORMAL,
+            },
         ];
     },
 });
 
+// ================================ DeferredMaterial ======================================
 
 CGE.DeferredMaterial = function() {
     CGE.Material.call(this);
@@ -107,6 +152,8 @@ CGE.DeferredMaterial = function() {
        _specularMap: undefined,
        _roughness: 0,
     });
+    let shader = CGE.DeferredMaterial.getShader();
+    Object.defineProperty(this, "_shader", { value:shader, writable:false });
 };
 
 Object.assign(CGE.DeferredMaterial, {
@@ -114,46 +161,72 @@ Object.assign(CGE.DeferredMaterial, {
         let shader = undefined;
         return function getShader() {
             if (shader === undefined) {
-                let vertexShaderText = "#version 100\n\
-                attribute vec4 Position;\n\
-                attribute vec3 Normal;\n\
-                attribute vec2 UV;\n\
-                varying vec2 o_uv; \n\
-                varying vec3 o_normal; \n\
-                uniform mat4 MVPMatrix; \n\
-                uniform mat4 NormalWMatrix; \n\
-                void main()\n\
-                {\n\
-                    o_uv = UV;\n\
-                    o_normal = Normal;\n\
-                    gl_Position = WMatrix * Position;\n\
-                }";
+                let vertexShaderText = `#version 100
+                attribute vec4 Position;
+                attribute vec3 Normal;
+                attribute vec3 Tangent;
+                attribute vec2 UV;
+                varying vec2 uv;
+                varying vec3 tangentToView0;
+                varying vec3 tangentToView1;
+                varying vec3 tangentToView2;
+                uniform mat4 MVMatrix;
+                uniform mat4 MVPMatrix;
+                void main()
+                {
+                    vec3 Binormal = normalize(cross(Tangent, Normal));
+                    mat3 normalMatrix = mat3(Tangent, Binormal, Normal);
+                    mat3 MVMatrix3 = mat3(
+                        MVMatrix[0].xyz, 
+                        MVMatrix[1].xyz, 
+                        MVMatrix[2].xyz
+                    );
+                    mat3 tangentToView = MVMatrix3 * normalMatrix;
+                    tangentToView0 = tangentToView[0];
+                    tangentToView1 = tangentToView[1];
+                    tangentToView2 = tangentToView[2];
+                    uv = UV;
+                    gl_Position = MVPMatrix * Position;
+                }`;
 
-                let fragmentShaderText = "#version 100\n\
-                #extension GL_EXT_draw_buffers : require \n\
-                precision highp float;\n\
-                varying vec2 o_uv; \n\
-                varying vec3 o_normal; \n\
-                uniform sampler2D diffuse; \n\
-                uniform sampler2D normal; \n\
-                uniform sampler2D specular; \n\
-                \n\
-                void main() \n\
-                {\n\
-                    vec4 color = texture2D(diffuse, o_uv); \n\
-                    gl_FragData[0] = vec4(color.xyz, 1.0); \n\
-                    gl_FragData[0] = vec4(color.xyz, 1.0); \n\
-                }";
+                let fragmentShaderText = `#version 100
+                #extension GL_EXT_draw_buffers : require
+                precision highp float;
+                varying vec2 uv;
+                varying vec3 tangentToView0;
+                varying vec3 tangentToView1;
+                varying vec3 tangentToView2;
+                uniform sampler2D diffuseMap;
+                uniform sampler2D normalMap;
+                uniform sampler2D specularMap;
+                void main()
+                {
+                    vec3 normalTex = texture2D(normalMap, uv).xyz;
+                    vec3 normal = (normalTex - vec3(0.5)) * 2.0;
+                    mat3 normalMatrix = mat3(
+                        normalize(tangentToView0), 
+                        normalize(tangentToView1), 
+                        normalize(tangentToView2)
+                    );
+                    normal = normalize(normalMatrix * normal);
+                    vec3 color = texture2D(diffuseMap, uv).xyz;
+                    float spec = texture2D(specularMap, uv).r;
+                    normal = normal * 0.5 + vec3(0.5);
+                    gl_FragData[0] = vec4(color, spec);
+                    gl_FragData[1] = vec4(normal, 0.0);
+                }`;
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
                 shader.addAttribName(CGE.AttribType.POSITION, 'Position');
-                shader.addAttribName(CGE.AttribType.NORMAL, 'Noraml');
+                shader.addAttribName(CGE.AttribType.NORMAL, 'Normal');
+                shader.addAttribName(CGE.AttribType.TANGENT, 'Tangent');
                 shader.addAttribName(CGE.AttribType.UV0, 'UV');
-                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
-                shader.addTextureName(CGE.MapType.NORMAL, 'normal');
-                shader.addTextureName(CGE.MapType.SPECULAR, 'specular');
-                shader.addMatrixName(CGE.MatrixType.WMatrix, 'MVPMatrix');
-                shader.addMatrixName(CGE.MatrixType.NormalWMatrix, 'NormalWMatrix');
+                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuseMap');
+                shader.addTextureName(CGE.MapType.NORMAL, 'normalMap');
+                shader.addTextureName(CGE.MapType.SPECULAR, 'specularMap');
+                shader.addMatrixName(CGE.MatrixType.MVPMatrix, 'MVPMatrix');
+                shader.addMatrixName(CGE.MatrixType.MVMatrix, 'MVMatrix');
+                shader.addMatrixName(CGE.MatrixType.NormalMVMatrix, 'NormalMVMatrix');
             }
             return shader;
         };
@@ -196,6 +269,154 @@ CGE.DeferredMaterial.prototype = Object.assign(Object.create(CGE.Material.protot
     getPropertyProvide: function() {
         return [
             {
+            },
+        ];
+    },
+});
+
+Object.assign(CGE.DeferredMaterial, {
+    createFromParameter: function(
+        diffuseMapUrl, dMipmap,
+        normalMapUrl, nMipmap,
+        specularMapUrl, sMipmap
+    ) {
+        let material = new CGE.DeferredMaterial();
+        material.setDiffuseMap(CGE.Texture2d.createFromeImage(diffuseMapUrl, dMipmap));
+        material.setNormalMap(CGE.Texture2d.createFromeImage(normalMapUrl, nMipmap));
+        let specularMap = CGE.Texture2d.createFromeImage(specularMapUrl, sMipmap);
+        material.setSpecularMap(specularMap);
+        return material;
+    },
+});
+
+// ================================ FullScreenTextureMatrial ======================================
+
+CGE.FullScreenTextureMatrial = function() {
+    CGE.Material.call(this);
+    Object.assign(this, {
+       _diffuseMap: undefined,
+    });
+    let shader = CGE.FullScreenTextureMatrial.getShader();
+    Object.defineProperty(this, "_shader", { value:shader, writable:false });
+};
+
+Object.assign(CGE.FullScreenTextureMatrial, {
+    getShader: function() {
+        let shader = undefined;
+        return function getShader() {
+            if (shader === undefined) {
+                let vertexShaderText = "#version 100\n\
+                attribute vec4 Position;\n\
+                attribute vec2 UV;\n\
+                varying vec2 o_uv; \n\
+                uniform mat4 WMatrix; \n\
+                void main()\n\
+                {\n\
+                    o_uv = UV;\n\
+                    gl_Position = WMatrix * Position;\n\
+                }";
+
+                let fragmentShaderText = "#version 100\n\
+                precision mediump float;\n\
+                varying vec2 o_uv; \n\
+                uniform sampler2D diffuse;\n\
+                \n\
+                void main()\n\
+                {\n\
+                    vec4 color = texture2D(diffuse, o_uv); \n\
+                    gl_FragColor = vec4(color.xyz, 1.0);\n\
+                }";
+                shader = new CGE.Shader();
+                shader.setShaderText(vertexShaderText, fragmentShaderText);
+                shader.addAttribName(CGE.AttribType.POSITION, 'Position');
+                shader.addAttribName(CGE.AttribType.UV0, 'UV');
+                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
+                shader.addMatrixName(CGE.MatrixType.WMatrix, 'WMatrix');
+            }
+            return shader;
+        };
+    }(),
+});
+
+CGE.FullScreenTextureMatrial.prototype = Object.assign(Object.create(CGE.Material.prototype), {
+    constructor: CGE.FullScreenTextureMatrial,
+
+    setDiffuseMap: function(map) {
+        this._diffuseMap = map;
+    },
+
+    getMapProvide: function() {
+        return [
+            {
+                map: this._diffuseMap,
+                type: CGE.MapType.DIFFUSE,
+            },
+        ];
+    },
+});
+
+// ================================ DepthTextureShowingMatrial ======================================
+
+CGE.DepthTextureShowingMatrial = function() {
+    CGE.Material.call(this);
+    Object.assign(this, {
+       _diffuseMap: undefined,
+    });
+    let shader = CGE.DepthTextureShowingMatrial.getShader();
+    Object.defineProperty(this, "_shader", { value:shader, writable:false });
+};
+
+Object.assign(CGE.DepthTextureShowingMatrial, {
+    getShader: function() {
+        let shader = undefined;
+        return function getShader() {
+            if (shader === undefined) {
+                let vertexShaderText = "#version 100\n\
+                attribute vec4 Position;\n\
+                attribute vec2 UV;\n\
+                varying vec2 o_uv; \n\
+                uniform mat4 WMatrix; \n\
+                void main()\n\
+                {\n\
+                    o_uv = UV;\n\
+                    gl_Position = WMatrix * Position;\n\
+                }";
+
+                let fragmentShaderText = `#version 100
+                precision mediump float;
+                varying vec2 o_uv;
+                uniform sampler2D diffuse;
+
+                void main()
+                {
+                    vec4 color = texture2D(diffuse, o_uv);
+                    float depth = color.r;
+                    gl_FragColor = vec4(depth, depth, depth, 1.0);
+                }`;
+                shader = new CGE.Shader();
+                shader.setShaderText(vertexShaderText, fragmentShaderText);
+                shader.addAttribName(CGE.AttribType.POSITION, 'Position');
+                shader.addAttribName(CGE.AttribType.UV0, 'UV');
+                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
+                shader.addMatrixName(CGE.MatrixType.WMatrix, 'WMatrix');
+            }
+            return shader;
+        };
+    }(),
+});
+
+CGE.DepthTextureShowingMatrial.prototype = Object.assign(Object.create(CGE.Material.prototype), {
+    constructor: CGE.DepthTextureShowingMatrial,
+
+    setDiffuseMap: function(map) {
+        this._diffuseMap = map;
+    },
+
+    getMapProvide: function() {
+        return [
+            {
+                map: this._diffuseMap,
+                type: CGE.MapType.DIFFUSE,
             },
         ];
     },

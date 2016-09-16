@@ -50,15 +50,18 @@ Object.assign( CGE, {
 
     MatrixType: {
         //W : world, 
-        //M : model, 
+        //M : model, // eqrt world
         //V : view, 
         //P : projection
         WMatrix                     : CGE.getTypeCount(),
+        VMatrix                     : CGE.getTypeCount(),
         MVMatrix                    : CGE.getTypeCount(),
         MVPMatrix                   : CGE.getTypeCount(),
         NormalWMatrix               : CGE.getTypeCount(),
         NormalMVMatrix              : CGE.getTypeCount(),
         NormalMVPMatrix             : CGE.getTypeCount(),
+        InverseWMatrix              : CGE.getTypeCount(),
+        InverseVMatrix              : CGE.getTypeCount(),
     },
 
     UniformType: {
@@ -1496,7 +1499,6 @@ Object.assign(CGE.ColorMaterial, {
                     vec3 normal = normalize((NormalWMatrix*o_normal).xyz); \n\
                     vec3 light = normalize(DIR_LIGHT); \n\
                     gl_FragColor = max(dot(light, normal), 0.0) * o_color;\n\
-                    gl_FragColor.w = 1.0;\n\
                 }";
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
@@ -2186,7 +2188,7 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
     },
 
     addTexture: function(targetType, format, dataType) {
-        let __format = format || CGE.RGB;
+        let __format = format || CGE.RGBA;
         let __dataType = dataType || CGE.UNSIGNED_BYTE;
         let texture2d = this._createTexture2d(__format, __dataType);
         this._textures.set(targetType, texture2d);
@@ -2262,6 +2264,8 @@ CGE.WebGLRenderer = function() {
 
     let ANISOTROPY = 2.0;
     _gl.enable(_gl.DEPTH_TEST);
+    _gl.depthFunc(_gl.LEQUAL);
+    _gl.disable(_gl.BLEND);
 
     // this function is ONLY used for DEBUG;
     this.getContext = function() {
@@ -2730,7 +2734,7 @@ CGE.WebGLRenderer = function() {
             // TODO: need re-build;
             switch(type) {
                 case CGE.UNSIGNED_INT:
-                    _gl.uniform1i(location, data);
+                    _gl.uniform1i(location, data[0]);
                     break;
                 case CGE.FLOAT_VEC2:
                     _gl.uniform2fv(location, data);
@@ -2843,7 +2847,6 @@ CGE.WebGLRenderer = function() {
             _uniforms: undefined,
             _glBuffer: undefined,
             _glProgram: undefined,
-            _entity: undefined,
             _2ndLocalVersion: -1,
         });
     };
@@ -2928,11 +2931,12 @@ CGE.WebGLRenderer = function() {
             }.bind(this));
         },
 
-        _applyMatrices: function(cameraMatrices) {
+        _applyMatrices: function(entity, cameraMatrices) {
             let glProgram = this._glProgram;
             let matrixLocaionMap = glProgram.getMatrixLocationMap();
-            let transform = this._entity.transform;
+            let transform = entity.transform;
             let worldMatrix = transform === undefined ? new CGE.Matrix4() : transform.getMatrix().clone();
+            let VMatrix = cameraMatrices.viewMatirx.clone()
 
             let getMVMatrix = function() {
                 let MVMatrix = undefined;
@@ -2959,6 +2963,9 @@ CGE.WebGLRenderer = function() {
                     case CGE.MatrixType.WMatrix:
                         matrix = worldMatrix;
                         break;
+                    case CGE.MatrixType.VMatrix:
+                        matrix = VMatrix;
+                        break;
                     case CGE.MatrixType.MVMatrix:
                         matrix = getMVMatrix();
                         break;
@@ -2974,6 +2981,12 @@ CGE.WebGLRenderer = function() {
                     case CGE.MatrixType.NormalMVPMatrix:
                         matrix = getMVPMatrix().clone().invertTranspose();
                         break;
+                    case CGE.MatrixType.InverseWMatrix:
+                        matrix = worldMatrix.clone().invert();
+                        break;
+                    case CGE.MatrixType.InverseVMatrix:
+                        matrix = VMatrix.clone().invert();
+                        break;
                     default:
                         return undefined;
                 }
@@ -2981,8 +2994,8 @@ CGE.WebGLRenderer = function() {
             });
         },
 
-        _applyUniforms: function() {
-            let material = this._entity.material;
+        _applyUniforms: function(entity) {
+            let material = entity.material;
             let properties = material.getPropertyProvide();
             let glProgram = this._glProgram;
             properties.forEach(function(property) {
@@ -2996,12 +3009,12 @@ CGE.WebGLRenderer = function() {
 
         },
 
-        _applyMaterial: function(cameraMatrices) {
+        _applyMaterial: function(entity, cameraMatrices) {
             this._glProgram.apply();
             
             this._applyTextures();
-            this._applyUniforms();
-            this._applyMatrices(cameraMatrices);
+            this._applyUniforms(entity);
+            this._applyMatrices(entity, cameraMatrices);
 
             //TODO: apply state;
         },
@@ -3020,7 +3033,6 @@ CGE.WebGLRenderer = function() {
             let shaderVersion = entity.geometry.getUpdateVersion();
             this.setLocalVersion(geometryVersion);
             this.set2ndLocalVersion(shaderVersion);
-            this._entity = entity;
             return this;
         },
 
@@ -3036,8 +3048,8 @@ CGE.WebGLRenderer = function() {
             return this;
         },
 
-        apply: function(cameraMatrices) {
-            this._applyMaterial(cameraMatrices);
+        apply: function(entity, cameraMatrices) {
+            this._applyMaterial(entity, cameraMatrices);
             this._applyVao();
         },
 
@@ -3088,7 +3100,7 @@ CGE.WebGLRenderer = function() {
                 return undefined;
             }
         }
-        glMesh.apply(cameraMatrices);
+        glMesh.apply(entity, cameraMatrices);
         glMesh.draw();
     };
 
@@ -3174,7 +3186,7 @@ CGE.WebGLRenderer = function() {
             renderTarget.setSize(screenWidth, screenHeight);
         }
         let glFrame = initializedMap.get(renderTarget.id);
-        if (glFrame && glFrame.getLocalVersion === renderTarget.getUpdateVersion()) {
+        if (glFrame && glFrame.getLocalVersion() === renderTarget.getUpdateVersion()) {
             if (!glFrame.checkTextures(renderTarget.getTextureMap(), renderTarget.getDepthStencilTexture())) {
                 return undefined;
             }
