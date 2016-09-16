@@ -199,6 +199,24 @@ Object.assign(CGE.DeferredMaterial, {
                 uniform sampler2D diffuseMap;
                 uniform sampler2D normalMap;
                 uniform sampler2D specularMap;
+
+                vec3 encodeNormal(vec3 normal)
+                {
+                    vec2 enc_spheremap = normalize(normal.xy) * sqrt(normal.z * 0.5 + 0.5);
+                    vec2 enc255 = enc_spheremap * 255.0;
+                    vec2 residual = floor(fract(enc255) * 16.0);
+                    vec3 enc = vec3(floor(enc255), residual.x * 16.0 + residual.y) * (1.0 / 255.0);
+                    return enc;
+                }
+
+                vec4 encodeDepth(float z)
+                {
+                    vec4 enc = vec4(1.0, 255.0, 65025.0, 16581375.0) * z;
+                    enc = fract(enc);
+                    enc -= enc.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0);
+                    return enc;
+                }
+
                 void main()
                 {
                     vec3 normalTex = texture2D(normalMap, uv).xyz;
@@ -211,9 +229,9 @@ Object.assign(CGE.DeferredMaterial, {
                     normal = normalize(normalMatrix * normal);
                     vec3 color = texture2D(diffuseMap, uv).xyz;
                     float spec = texture2D(specularMap, uv).r;
-                    normal = normal * 0.5 + vec3(0.5);
+                    vec3 encodeNorm = encodeNormal(normal);
                     gl_FragData[0] = vec4(color, spec);
-                    gl_FragData[1] = vec4(normal, 0.0);
+                    gl_FragData[1] = vec4(encodeNorm, 0.0);
                 }`;
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
@@ -291,10 +309,10 @@ Object.assign(CGE.DeferredMaterial, {
 
 // ================================ FullScreenTextureMatrial ======================================
 
-CGE.FullScreenTextureMatrial = function() {
+CGE.FullScreenTextureMatrial = function(diffuse) {
     CGE.Material.call(this);
     Object.assign(this, {
-       _diffuseMap: undefined,
+       _diffuseMap: diffuse,
     });
     let shader = CGE.FullScreenTextureMatrial.getShader();
     Object.defineProperty(this, "_shader", { value:shader, writable:false });
@@ -357,10 +375,10 @@ CGE.FullScreenTextureMatrial.prototype = Object.assign(Object.create(CGE.Materia
 
 // ================================ DepthTextureShowingMatrial ======================================
 
-CGE.DepthTextureShowingMatrial = function() {
+CGE.DepthTextureShowingMatrial = function(diffuse) {
     CGE.Material.call(this);
     Object.assign(this, {
-       _diffuseMap: undefined,
+       _diffuseMap: diffuse,
     });
     let shader = CGE.DepthTextureShowingMatrial.getShader();
     Object.defineProperty(this, "_shader", { value:shader, writable:false });
@@ -389,9 +407,10 @@ Object.assign(CGE.DepthTextureShowingMatrial, {
 
                 void main()
                 {
-                    vec4 color = texture2D(diffuse, o_uv);
-                    float depth = color.r;
-                    gl_FragColor = vec4(depth, depth, depth, 1.0);
+                    vec4 depth = texture2D(diffuse, o_uv);
+                    float depth_value = depth.x;
+                    gl_FragColor = vec4(vec3(pow(depth_value, 2000.0)), 1.0);
+                    // gl_FragColor = depth;
                 }`;
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
@@ -407,6 +426,72 @@ Object.assign(CGE.DepthTextureShowingMatrial, {
 
 CGE.DepthTextureShowingMatrial.prototype = Object.assign(Object.create(CGE.Material.prototype), {
     constructor: CGE.DepthTextureShowingMatrial,
+
+    setDiffuseMap: function(map) {
+        this._diffuseMap = map;
+    },
+
+    getMapProvide: function() {
+        return [
+            {
+                map: this._diffuseMap,
+                type: CGE.MapType.DIFFUSE,
+            },
+        ];
+    },
+});
+
+// ================================ SpecularTextureShowingMatrial ======================================
+
+CGE.SpecularTextureShowingMatrial = function(diffuse) {
+    CGE.Material.call(this);
+    Object.assign(this, {
+       _diffuseMap: diffuse,
+    });
+    let shader = CGE.SpecularTextureShowingMatrial.getShader();
+    Object.defineProperty(this, "_shader", { value:shader, writable:false });
+};
+
+Object.assign(CGE.SpecularTextureShowingMatrial, {
+    getShader: function() {
+        let shader = undefined;
+        return function getShader() {
+            if (shader === undefined) {
+                let vertexShaderText = "#version 100\n\
+                attribute vec4 Position;\n\
+                attribute vec2 UV;\n\
+                varying vec2 o_uv; \n\
+                uniform mat4 WMatrix; \n\
+                void main()\n\
+                {\n\
+                    o_uv = UV;\n\
+                    gl_Position = WMatrix * Position;\n\
+                }";
+
+                let fragmentShaderText = `#version 100
+                precision mediump float;
+                varying vec2 o_uv;
+                uniform sampler2D diffuse;
+
+                void main()
+                {
+                    float color = texture2D(diffuse, o_uv).a;
+                    gl_FragColor = vec4(vec3(color), 1.0);
+                }`;
+                shader = new CGE.Shader();
+                shader.setShaderText(vertexShaderText, fragmentShaderText);
+                shader.addAttribName(CGE.AttribType.POSITION, 'Position');
+                shader.addAttribName(CGE.AttribType.UV0, 'UV');
+                shader.addTextureName(CGE.MapType.DIFFUSE, 'diffuse');
+                shader.addMatrixName(CGE.MatrixType.WMatrix, 'WMatrix');
+            }
+            return shader;
+        };
+    }(),
+});
+
+CGE.SpecularTextureShowingMatrial.prototype = Object.assign(Object.create(CGE.Material.prototype), {
+    constructor: CGE.SpecularTextureShowingMatrial,
 
     setDiffuseMap: function(map) {
         this._diffuseMap = map;

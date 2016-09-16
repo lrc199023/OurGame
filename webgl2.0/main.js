@@ -87,6 +87,7 @@ Object.assign( CGE, {
     renderTargetLocation: {
         COLOR                       : 0,
         NORMAL                      : 1,
+        DEPTH                       : 2,
         // TODO: Add more render target type;
     },
 
@@ -1990,6 +1991,16 @@ CGE.Entity.prototype = Object.assign(Object.create(CGE.Object.prototype), {
 
     getParent: function(entity) {
         return this._parent;
+    },
+});
+
+Object.assign(CGE.Entity, {
+    createRenderableEntity: function(geometry, material, transform) {
+        let entity = new CGE.Entity();
+        entity.addComponent(CGE.Component.CreateGeometryComponent(geometry));
+        entity.addComponent(CGE.Component.CreateMaterialComponent(material));
+        entity.addComponent(CGE.Component.CreateTransfromComponent(transform));
+        return entity;
     },
 });
 
