@@ -191,7 +191,7 @@ Object.assign(CGE.DeferredMaterial, {
 
                 let fragmentShaderText = `#version 100
                 #extension GL_EXT_draw_buffers : require
-                precision highp float;
+                precision mediump float;
                 varying vec2 uv;
                 varying vec3 tangentToView0;
                 varying vec3 tangentToView1;
@@ -203,6 +203,7 @@ Object.assign(CGE.DeferredMaterial, {
                 vec3 encodeNormal(vec3 normal)
                 {
                     vec2 enc_spheremap = normalize(normal.xy) * sqrt(normal.z * 0.5 + 0.5);
+                    enc_spheremap = enc_spheremap * 0.5 + vec2(0.5);
                     vec2 enc255 = enc_spheremap * 255.0;
                     vec2 residual = floor(fract(enc255) * 16.0);
                     vec3 enc = vec3(floor(enc255), residual.x * 16.0 + residual.y) / 255.0;
@@ -219,9 +220,9 @@ Object.assign(CGE.DeferredMaterial, {
                         normalize(tangentToView2)
                     );
                     normal = normalize(normalMatrix * normal);
+                    vec3 encodeNorm = normal;// encodeNormal(normal);
                     vec3 color = texture2D(diffuseMap, uv).xyz;
                     float spec = texture2D(specularMap, uv).r;
-                    vec3 encodeNorm = normal;//encodeNormal(normal);
                     gl_FragData[0] = vec4(color, spec);
                     gl_FragData[1] = vec4(encodeNorm, 0.0);
                 }`;
@@ -500,12 +501,13 @@ CGE.SpecularTextureShowingMaterial.prototype = Object.assign(Object.create(CGE.M
 
 // ================================ SSAOPostProcessMaterial ======================================
 
-CGE.SSAOPostProcessMaterial = function(colorTexture, normalTexture, depthTexture) {
+CGE.SSAOPostProcessMaterial = function(colorTexture, normalTexture, depthTexture, randomTexture) {
     CGE.Material.call(this);
     Object.assign(this, {
        _colorTexture: colorTexture,
        _normalTexture: normalTexture,
        _depthTexture: depthTexture,
+       _randomTexture: randomTexture,
     });
     let shader = CGE.SSAOPostProcessMaterial.getShader();
     Object.defineProperty(this, "_shader", { value:shader, writable:false });
@@ -536,33 +538,30 @@ Object.assign(CGE.SSAOPostProcessMaterial, {
                 uniform sampler2D colorTexture;
                 uniform sampler2D normalTexture;
                 uniform sampler2D depthTexture;
+                uniform sampler2D randomTexture;
                 uniform mat4 PMatrix;
                 uniform mat4 WMatrix;
                 uniform mat4 VMatrix;
                 uniform mat4 InversePMatrix;
 
-                #define DL 0.78539816
-
+                const float DL = 0.78539816;
                 const vec4 light = vec4(-0.6, -0.8, 1.0, 0.0);
 
-                const float noiseAmount = 0.0003;
                 const int samples = 8;
                 const float radius = 5.0;
 
-                vec2 rand( const vec2 coord ) {
-                    vec2 noise;
-                    float nx = dot ( coord, vec2( 12.9898, 78.233 ) );
-                    float ny = dot ( coord, vec2( 12.9898, 78.233 ) * 2.0 );
-                    noise = clamp( fract ( 43758.5453 * sin( vec2( nx, ny ) ) ), 0.0, 1.0 );
-                    return ( noise * 2.0  - 1.0 ) * noiseAmount;
-                }
-
                 vec3 decodeNormal(vec3 enc)
                 {
-                    vec3 normal;
                     float nz = floor(enc.z * 255.0) / 16.0;
                     vec2 n = enc.xy + vec2(floor(nz) / 16.0, fract(nz)) / 255.0;
-                    normal.z = dot(n, n) * 2.0 - 1.0;
+                    
+                    // vec4 nn = vec4(n, 1.0, 1.0) * vec4(2.0, 2.0, 0, 0) + vec4(-1, -1, 1, -1);
+                    // float l = dot(nn.xyz, -nn.xyw);
+                    // return vec3(nn.xy * sqrt(l), l) * 2.0; + vec3(0, 0, -1);
+
+                    n = (n - vec2(0.5)) * 2.0;
+                    vec3 normal;
+                    normal.z = length(n) * 2.0 - 1.0;
                     normal.xy = normalize(n) * sqrt(1.0 - normal.z * normal.z);
                     return normal;
                 }
@@ -576,42 +575,54 @@ Object.assign(CGE.SSAOPostProcessMaterial, {
                     return view_position;
                 }
 
+                float doAmbientOcclusion(vec2 tcoord,vec2 iuv, vec3 p, vec3 cnorm)  
+                {  
+                    vec2 uv = tcoord + iuv;
+                    float depth = texture2D(depthTexture, uv).r;
+                    vec3 diff = viewPos(uv, depth) - p;  
+                    vec3 v = normalize(diff);  
+                    float d = length(diff) * 0.75;  
+                    return max(0.0, dot(cnorm, v) - 0.5) * (1.0 / (1.0 + d)) * 10.0;  
+                } 
+
+                vec2 getRandom(vec2 uv, vec2 screenSize)  
+                {   
+                    return normalize(texture2D(randomTexture, screenSize * uv / 64.0).xy * 2.0 - 1.0);  
+                }  
+
                 void main()
                 {
                     vec4 color = texture2D(colorTexture, o_uv);
                     vec3 normal = texture2D(normalTexture, o_uv).xyz;
                     float depth_z = texture2D(depthTexture, o_uv).r;
                     vec3 v_pos = viewPos(o_uv, depth_z);
-                    vec3 view_normal = normal;// decodeNormal(normal);
+                    vec3 view_normal = normal;// normalize(decodeNormal(normal));
                     vec2 offset = vec2(dFdx(o_uv).x, dFdy(o_uv).y);
+                    vec2 screenSize = vec2(1.0) / offset;
                     float ao = 0.0;
-                    float dz = 1.0 / float( samples );
-                    float z = 1.0 - dz * 0.5;
                     float l = -1.0;
                     float v_light_ness = max(0.0, dot(normalize((VMatrix * light).xyz), view_normal));
-                    v_light_ness = v_light_ness * 0.8 + 0.2;
-                    v_light_ness = min(1.0, v_light_ness * 1.5);
-                    float dep = 1.0 / depth_z;
+                    float dep = 5.0 / depth_z; //pow(depth_z, 2000.0);
+                    vec2 rand = getRandom(o_uv, screenSize);
                     for (int i = 0; i < samples; i++) 
                     {
-                        vec2 p = vec2(cos( l ), sin( l )) * 2.0 * dep;
-                        l = l + DL;
-                        vec2 n_uv = o_uv + offset * p;
-                        float n_depth_z = texture2D(depthTexture, n_uv).r;
-                        vec3 n_v_pos = viewPos(n_uv, n_depth_z);
-                        vec3 diff = n_v_pos - v_pos;
-                        vec3 v = normalize(diff);
-                        float d = length(diff) * 0.25;  
-                        ao += max(0.0, dot(view_normal, v)) * (1.0 / (1.0 + d)) * 2.0; 
+                        vec2 p = vec2(cos(l), sin(l));
+                        l += DL;
+                        vec2 coord1 = reflect(p, rand) * dep;  
+                        vec2 coord2 = vec2(coord1.x*0.707 - coord1.y*0.707, coord1.x*0.707 + coord1.y*0.707) * offset;  
+                        ao += doAmbientOcclusion(o_uv, coord1*0.25, v_pos, view_normal);
+                        ao += doAmbientOcclusion(o_uv, coord2*0.5, v_pos, view_normal);
+                        ao += doAmbientOcclusion(o_uv, coord1*0.75, v_pos, view_normal);
+                        ao += doAmbientOcclusion(o_uv, coord2, v_pos, view_normal);
                     } 
-                    ao *=  dz;
+                    ao /= float(samples) * 4.0;
                     ao = 1.0 - ao;
                     vec3 lumcoeff = vec3( 0.299, 0.587, 0.114 );
                     float lum = dot( color.rgb, lumcoeff );
                     vec3 luminance = vec3( lum );
                     vec3 fao = mix( vec3( ao ), vec3( 1.0 ), luminance * 0.5 );                    
                     gl_FragColor = vec4(v_light_ness * color.xyz * fao, 1.0);
-                    // gl_FragColor = vec4(v_light_ness * color.xyz , 1.0);
+                    // gl_FragColor = vec4(color.xyz, 1.0);
                 }`;
                 shader = new CGE.Shader();
                 shader.setShaderText(vertexShaderText, fragmentShaderText);
@@ -620,6 +631,7 @@ Object.assign(CGE.SSAOPostProcessMaterial, {
                 shader.addTextureName(CGE.MapType.DIFFUSE, 'colorTexture');
                 shader.addTextureName(CGE.MapType.NORMAL, 'normalTexture');
                 shader.addTextureName(CGE.MapType.DEPTH, 'depthTexture');
+                shader.addTextureName(CGE.MapType.OTHER0, 'randomTexture');
                 shader.addMatrixName(CGE.MatrixType.WMatrix, 'WMatrix');
                 shader.addMatrixName(CGE.MatrixType.PMatrix, 'PMatrix');
                 shader.addMatrixName(CGE.MatrixType.VMatrix, 'VMatrix');
@@ -652,6 +664,10 @@ CGE.SSAOPostProcessMaterial.prototype = Object.assign(Object.create(CGE.Material
                 map: this._depthTexture,
                 type: CGE.MapType.DEPTH,
             },
+            {
+                map: this._randomTexture,
+                type: CGE.MapType.OTHER0,
+            }
         ];
     },
 });

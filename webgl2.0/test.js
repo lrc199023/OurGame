@@ -80,7 +80,9 @@ teapotGeometry.setDrawParameter(teapotIndices.length);
 
 let test_normal_map = CGE.Texture2d.createFromeImage('spnza_bricks_a_ddn.jpg', true);
 
-let fullScreenMaterial = new CGE.SSAOPostProcessMaterial(colorTexrure, normalTexrure, depthTexrure);
+let randomMap = CGE.Texture2d.createFromeImage('randomMap.gif', false);
+
+let fullScreenMaterial = new CGE.SSAOPostProcessMaterial(colorTexrure, normalTexrure, depthTexrure, randomMap);
 let fullScreenTransform = new CGE.Transform(new CGE.Vector3(0.0, 0.0, 0.8));
 let fullScreenEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, fullScreenMaterial, fullScreenTransform);
 
