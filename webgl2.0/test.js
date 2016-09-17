@@ -29,7 +29,7 @@ renderTarget.setFollowScreen(true);
 renderTarget.setSize(window.innerWidth, window.innerHeight);
 renderTarget.enableDepthStencil();
 renderTarget.addTexture(CGE.renderTargetLocation.COLOR);
-renderTarget.addTexture(CGE.renderTargetLocation.NORMAL);
+renderTarget.addTexture(CGE.renderTargetLocation.NORMAL, undefined, undefined, CGE.NEAREST, CGE.NEAREST);
 // renderTarget.addTexture(CGE.renderTargetLocation.DEPTH);
 
 let colorTexrure = renderTarget.getTextureFromType(CGE.renderTargetLocation.COLOR);
@@ -80,24 +80,24 @@ teapotGeometry.setDrawParameter(teapotIndices.length);
 
 let test_normal_map = CGE.Texture2d.createFromeImage('spnza_bricks_a_ddn.jpg', true);
 
-let fullScreenMaterial = new CGE.FullScreenTextureMatrial(colorTexrure);
-let fullScreenTransform = new CGE.Transform();
+let fullScreenMaterial = new CGE.SSAOPostProcessMaterial(colorTexrure, normalTexrure, depthTexrure);
+let fullScreenTransform = new CGE.Transform(new CGE.Vector3(0.0, 0.0, 0.8));
 let fullScreenEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, fullScreenMaterial, fullScreenTransform);
 
-let colorShowingMaterial = new CGE.FullScreenTextureMatrial(colorTexrure);
-let colorShowingTransform = new CGE.Transform(new CGE.Vector3(-0.4, -0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
+let colorShowingMaterial = new CGE.FullScreenTextureMaterial(colorTexrure);
+let colorShowingTransform = new CGE.Transform(new CGE.Vector3(-0.4, 0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
 let colorShowingEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, colorShowingMaterial, colorShowingTransform);
 
-let normalShowingMaterial = new CGE.FullScreenTextureMatrial(normalTexrure);
-let normalShowingTransform = new CGE.Transform(new CGE.Vector3(0.0, -0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
+let normalShowingMaterial = new CGE.FullScreenTextureMaterial(normalTexrure);
+let normalShowingTransform = new CGE.Transform(new CGE.Vector3(0.0, 0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
 let normalShowingEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, normalShowingMaterial, normalShowingTransform);
 
-let specularShowingMaterial = new CGE.SpecularTextureShowingMatrial(colorTexrure);
-let specularShowingTransform = new CGE.Transform(new CGE.Vector3(0.4, -0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
+let specularShowingMaterial = new CGE.SpecularTextureShowingMaterial(colorTexrure);
+let specularShowingTransform = new CGE.Transform(new CGE.Vector3(0.4, 0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
 let specularShowingEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, specularShowingMaterial, specularShowingTransform);
 
-let depthShowingMaterial = new CGE.DepthTextureShowingMatrial(depthTexrure);
-let depthShowingTransform = new CGE.Transform(new CGE.Vector3(0.8, -0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
+let depthShowingMaterial = new CGE.DepthTextureShowingMaterial(depthTexrure);
+let depthShowingTransform = new CGE.Transform(new CGE.Vector3(0.8, 0.8, -0.1), undefined, new CGE.Vector3(0.2, 0.2, 1));
 let depthShowingEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, depthShowingMaterial, depthShowingTransform);
 
 let cameraEntity = new CGE.Entity();
@@ -105,7 +105,7 @@ cameraEntity.addComponent(CGE.Component.CreateTransfromComponent(new CGE.Transfo
 cameraEntity.addComponent(CGE.Component.CreateCameraComponent(camera));
 
 let renderTargetCamera = new CGE.Camera(window.innerWidth, window.innerHeight);
-renderTargetCamera.setPosition(new CGE.Vector3(200, 200, 200));
+renderTargetCamera.setPosition(new CGE.Vector3(200, 200, 300));
 renderTargetCamera.lookAt(new CGE.Vector3(0,0,0));
 renderTargetCamera.update();
 
@@ -130,21 +130,21 @@ cubeMaterial.setCubeMap(cubeTexture);
 cubeMaterial.setNormalMap(test_normal_map);
 
 let cubeMapTransform = new CGE.Transform(new CGE.Vector3(100, 0, 0), undefined, new CGE.Vector3(1, 1, 1));
-let teapotMatrial = CGE.DeferredMaterial.createFromParameter(
+let teapotMaterial = CGE.DeferredMaterial.createFromParameter(
     'spnza_bricks_a_diff.jpg', true,
     'spnza_bricks_a_ddn.jpg', true,
     'spnza_bricks_a_spec.jpg', true);
-let teapotEntity = CGE.Entity.createRenderableEntity(teapotGeometry, teapotMatrial, cubeMapTransform);
+let teapotEntity = CGE.Entity.createRenderableEntity(teapotGeometry, teapotMaterial, cubeMapTransform);
 
 
 let bigPlaneTransform = new CGE.Transform(new CGE.Vector3(0, 0, 0), undefined, new CGE.Vector3(300, 300, 1));
 
-let bigPlaneMatrial = CGE.DeferredMaterial.createFromParameter(
+let bigPlaneMaterial = CGE.DeferredMaterial.createFromParameter(
     'spnza_bricks_a_diff.jpg', true,
     'spnza_bricks_a_ddn.jpg', true,
     'spnza_bricks_a_spec.jpg', true);
 
-let bigPlaneEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, bigPlaneMatrial, bigPlaneTransform);
+let bigPlaneEntity = CGE.Entity.createRenderableEntity(planeVertexGeometry, bigPlaneMaterial, bigPlaneTransform);
 
 let renderTargetScene = new CGE.Scene();
 renderTargetScene.addEntity(bigPlaneEntity);
@@ -152,12 +152,15 @@ renderTargetScene.setMainCamera(renderTargetCameraEntity);
 
 let min = -250;
 
+let trans = [];
+
 for (let i = 0; i < 10; i++) {
     for (let j = 0; j < 10; j++) {
         let x = min + i * 50;
         let y = min + j * 50;
-        let transform = new CGE.Transform(new CGE.Vector3(x, y, 0), undefined, new CGE.Vector3(0.5, 0.5, 0.5));
-        let entity = CGE.Entity.createRenderableEntity(teapotGeometry, teapotMatrial, transform);
+        let transform = new CGE.Transform(new CGE.Vector3(x, y, 0), undefined, new CGE.Vector3(0.75, 0.75, 0.75));
+        trans.push(transform);
+        let entity = CGE.Entity.createRenderableEntity(teapotGeometry, teapotMaterial, transform);
         renderTargetScene.addEntity(entity);
     }
 }
@@ -168,7 +171,7 @@ mainScene.addEntity(colorShowingEntity);
 mainScene.addEntity(normalShowingEntity);
 mainScene.addEntity(specularShowingEntity);
 mainScene.addEntity(depthShowingEntity);
-mainScene.setMainCamera(cameraEntity);
+mainScene.setMainCamera(renderTargetCameraEntity);
 
 let quater = new CGE.Quaternion();
 quater.setAxisAngle(new CGE.Vector3(0, 0, 1), 0.01 * Math.PI);
@@ -189,6 +192,9 @@ let render = function() {
     rad += 0.01 * Math.PI;
     renderTargetScene.update();
     mainScene.update();
+    trans.forEach(function(transform){
+        transform.applyMatrix4(testMat4);
+    });
     renderer.renderScene(renderTargetScene, renderTarget);
     renderer.renderScene(mainScene);
 };
@@ -200,7 +206,7 @@ function loop() {
                         ||window.msRequestAnimationFrame
                         ||window.oRequestAnimationFrame
                         ||function(a){
-        setTimeout(a, 1000/30);
+        setTimeout(a, 1000/5);
     };
 	animationframe(loop);
 	render();
@@ -238,5 +244,5 @@ window.onkeydown = function(event) {
 
 render();
 if (noError) {
-    loop();
+    // loop();
 }

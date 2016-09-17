@@ -55,6 +55,7 @@ Object.assign( CGE, {
         //P : projection
         WMatrix                     : CGE.getTypeCount(),
         VMatrix                     : CGE.getTypeCount(),
+        PMatrix                     : CGE.getTypeCount(),
         MVMatrix                    : CGE.getTypeCount(),
         MVPMatrix                   : CGE.getTypeCount(),
         NormalWMatrix               : CGE.getTypeCount(),
@@ -62,6 +63,7 @@ Object.assign( CGE, {
         NormalMVPMatrix             : CGE.getTypeCount(),
         InverseWMatrix              : CGE.getTypeCount(),
         InverseVMatrix              : CGE.getTypeCount(),
+        InversePMatrix              : CGE.getTypeCount(),
     },
 
     UniformType: {
@@ -775,7 +777,7 @@ Object.assign(CGE.Matrix4.prototype, {
 
     perspective: function(fovy, aspect, near, far) {
         let f = 1.0 / Math.tan(fovy / 2), 
-            nf = 1 / (near - far);
+            nf = 1.0 / (near - far);
         this.data[0] = f / aspect;
         this.data[1] = 0;
         this.data[2] = 0;
@@ -2146,6 +2148,7 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
         this._state.setClearDepth(true);
         this._state.setClearStencil(true);
         let texture2d = this._createTexture2d(CGE.DEPTH_STENCIL, CGE.UNSIGNED_INT_24_8);
+        texture2d.setFilter(CGE.NEAREST, CGE.NEAREST);
         this._depthStencilTexture = texture2d;
     },
 
@@ -2198,10 +2201,11 @@ CGE.RenderTarget.prototype = Object.assign(Object.create(CGE.VersionObject.proto
         this._state.setViewport(viewport);
     },
 
-    addTexture: function(targetType, format, dataType) {
+    addTexture: function(targetType, format, dataType, filterMin, filterMag) {
         let __format = format || CGE.RGBA;
         let __dataType = dataType || CGE.UNSIGNED_BYTE;
         let texture2d = this._createTexture2d(__format, __dataType);
+        texture2d.setFilter(filterMin, filterMag);
         this._textures.set(targetType, texture2d);
     },
 
@@ -2946,8 +2950,7 @@ CGE.WebGLRenderer = function() {
             let glProgram = this._glProgram;
             let matrixLocaionMap = glProgram.getMatrixLocationMap();
             let transform = entity.transform;
-            let worldMatrix = transform === undefined ? new CGE.Matrix4() : transform.getMatrix().clone();
-            let VMatrix = cameraMatrices.viewMatirx.clone()
+            let worldMatrix = transform === undefined ? new CGE.Matrix4() : transform.getMatrix();
 
             let getMVMatrix = function() {
                 let MVMatrix = undefined;
@@ -2975,7 +2978,10 @@ CGE.WebGLRenderer = function() {
                         matrix = worldMatrix;
                         break;
                     case CGE.MatrixType.VMatrix:
-                        matrix = VMatrix;
+                        matrix = cameraMatrices.viewMatirx;
+                        break;
+                    case CGE.MatrixType.PMatrix:
+                        matrix = cameraMatrices.projectionMatirx;
                         break;
                     case CGE.MatrixType.MVMatrix:
                         matrix = getMVMatrix();
@@ -2997,6 +3003,9 @@ CGE.WebGLRenderer = function() {
                         break;
                     case CGE.MatrixType.InverseVMatrix:
                         matrix = VMatrix.clone().invert();
+                        break;
+                    case CGE.MatrixType.InversePMatrix:
+                        matrix = cameraMatrices.projectionMatirx.clone().invert();
                         break;
                     default:
                         return undefined;
